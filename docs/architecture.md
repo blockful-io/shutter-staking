@@ -8,17 +8,6 @@ in the form of any ERC20 token the DAO decides to distribute, such as SHU or WET
 The staking contract is designed to be flexible and upgradable using the
 Transparant Proxy pattern where only the DAO has the permission to upgrade.
 
-### Rewards Formula 
-
-The rewards are calculated using the following formula:
-
-``` solidity
-uint256 pendingRewards = (block.timestamp - userStake.lastStakedTime) * rewardRate * userStake.amount;
-```
-
-Where `lastStakedTime` is the last time the keyper staked, `rewardRate` is the
-emission rate of the reward token and `amount` is the amount of SHU tokens staked.
-
 ### Security Considerations
 
 1. The staking contract uses the Ownable pattern where only the DAO has the
@@ -42,22 +31,20 @@ emission rate of the reward token and `amount` is the amount of SHU tokens stake
 
 Stake `amount` of SHU tokens. The caller must have approved the staking contract
 to transfer `amount` of SHU tokens on their behalf. Only addresses beloging to the 
-keyper mapping can call this function. If a keyper call this function multiple
-times, the new stake will be added to the existing stake and the rewards will be
-accumulated from the last time the keyper staked. The tokens will be locked for
-`lockPeriod` seconds.
+keyper mapping can call this function. Each call to this function will create a
+new stake with its own lock period.
 
-### `unstake(uint256 amount)`
+### `unstake(uint256 stakeId)`
 
-Unstake `amount` of SHU tokens. The caller will receive their staked SHU tokens
-back and any rewards they have accumulated. The caller must have staked for at
-least `lockPeriod` before they can unstake.
+Unstake the SHU tokens associated with `stakeId`. The caller will receive their
+staked SHU tokens back and any rewards they have accumulated for that specific
+stake. The caller must have staked for at least the stake `lockPeriod` before 
+they can unstake.
 
-### `claimRewards()`
+### `claimRewards(uint256 stakeId)`
 
-Claim any rewards the caller has accumulated. The contract uses auto compounding
-and as a result the caller will only receive the rewards they have accumulated
-after `lockPeriod` has passed.
+Claim any other token rewards excluding the SHU tokens rewards for the stake
+`stakeId`. Only the keypeir can claim their rewards.
 
 ## Owner Functions (DAO)
 
@@ -86,21 +73,26 @@ staking token calling this function.
 
 ## View Functions
 
-### `getStake(address keyper)`
+### `getStake(address keyper, uint256 stakeId)`
 
-Get the amount of SHU tokens staked by `keyper`.
+Get the amount of SHU tokens staked by `keyper` for the specified `stakeId`. 
 
-### `getRewards(address keyper)`
+### `getRewards(address keyper, uint256 stakeId)`
 
-Get the amount of rewards accumulated by `keyper` until the current timestamp.
+Get the amount of ERC20 rewards accumulated by `keyper`  for the specified `stakeId`
+until the current timestamp excluding the SHU tokens rewards.
+
+### `getTotalStaked(address keyper)`
+
+Get the total amount of SHU tokens staked by `keyper` including the SHU rewards
+accumulated until the current timestamp. This function is useful for keypers to
+know how much they have staked considering all their stakes and how much SHU
+they have earned in rewards.
 
 ### `getTotalStaked()`
 
-Get the total amount of SHU tokens staked.
-
-### `getTotalRewards()`
-
-Get the total amount of rewards accumulated.
+Get the total amount of SHU tokens staked including the SHU rewards accumulated
+until the current timestamp as the SHU rewards are compounded.
 
 ### `getLockPeriod()`
 
@@ -109,6 +101,52 @@ Get the lock period.
 ### `getRewardsConfiguration()`
 
 Get an array of reward tokens and their emission rates.
+
+### `getUserStakes(address keyper)`
+
+Get an array of stake IDs for a given keyper.
+
+### `getUnlockedStakes(address keyper)`
+
+Get an array of stake IDs for a given keyper that have passed the lock period.
+
+## Implementation Details
+
+### Storage
+
+Each user will have multiple stakes, each with a unique identifier (stakeId).
+The contract will maintain a mapping from user addresses to an array of stakes,
+where each stake includes the amount, lock period and the staked time.
+When a user stakes, a new stake is created and appended to their array of stakes.
+When a user unstakes or claims rewards, they must specify the stakeId to
+identify the stake they want to unstake or claim rewards from.
+
+```solidity
+struct Stake {
+    uint256 amount;
+    uint256 stakedTime;
+    uint256 lockPeriod;
+}
+
+mapping(address keypeir => Stake[]) public userStakes;
+```
+
+### Rewards Formula 
+
+The rewards are calculated using the following formula:
+
+``` solidity
+uint256 currentRewards = (block.timestamp - userStake.stakedTime) * rewardRate * userStake.amount;
+```
+
+Where `rewardRate` is the emission rate of the reward token. Each reward token
+will have its own emission rate. The rewards are calculated for each stake
+individually. The rewards for other ERC20 tokens are not compounded, meaning the
+meaning the rewards are calculated from the time the stake was created until the
+current timestamp.
+ 
+
+
 
 
 
