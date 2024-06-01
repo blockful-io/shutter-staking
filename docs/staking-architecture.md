@@ -2,11 +2,14 @@
 
 ## Overview
 
-The staking contract is a smart contract that allows keypers to stake SHU tokens
-effectively locking them up for a period of time. In return, keypers receive rewards
-in the form of any ERC20 token the DAO decides to distribute, such as SHU or WETH.
-The staking contract is designed to be flexible and upgradable using the
-Transparant Proxy pattern where only the DAO has the permission to upgrade.
+The staking contract is a staking smart contract that allows keypers to stake SHU tokens
+effectively locking them up for a minimum period of time. In return, keypers receive rewards
+in the form of any ERC20 token the DAO decides to distribute, such as SHU or
+WETH. SHU rewards are auto compounded and not claimable, which means the rewards
+are added to the staked amount effectively increasing the staked amount and the 
+rewards paid to the keyper as a consequence. 
+
+The staking contract is designed to be flexible and upgradable using the Transparant Proxy pattern where only the DAO has the permission to upgrade.
 
 ### Security Considerations
 
@@ -115,14 +118,6 @@ Get the lock period.
 
 Get an array of reward tokens and their emission rates.
 
-### `getUserStakes(address keyper)`
-
-Get an array of stake IDs for a given keyper.
-
-### `getUnlockedStakes(address keyper)`
-
-Get an array of stake IDs for a given keyper that have passed the lock period.
-
 ## Contract Storage
 
 ### Immutable Variables
@@ -164,7 +159,7 @@ unclaimedRewards`: a mapping from keypers to their rewards for each stake until 
 rewards are auto compounded. When a keyper claims rewards, the rewards claimed
 are subtracted from this mapping.
 * `mapping(address keyper => (address rewardToken => uint256 rewards)) public paidRewards`: a
-mapping from keypers to their rewards for each already paid until the
+mapping from keypers to their rewards already paid until the
 `lastUpdateTimestamp`. Paid here does not mean the rewards were claimed, but
 that the rewards were already calculated and added to the `unclaimedRewards`
 * `mapping(address keyper => uint256 stakedTimestamp) public stakedTimestamp`: a
@@ -172,17 +167,31 @@ mapping from keypers to the timestamp when they staked their SHU tokens for
 the first time. This is used to calculate the lock period.
 * `mapping(address rewardToken => uint256 rewardPerToken) public
   currentRewardPerToken`: a mapping from reward tokens to the reward per token to
-  distribute from the `lastUpdateTimestamp` until the current timestamp.
+  distribute from the `lastUpdateTimestamp` until the current timestamp, i.e the
+  accumulated rewards per token of the current snapshot.
   
-## Rewards Formula 
+## Rewards Calculation Mechanismm
 
-The rewards are recalculate and accrued every time the keyper interacts with the contract.
+* The rewards are recalculate and accrued every time the keyper interacts with the contract.
 This includes staking, unstaking, and claiming rewards. 
+* The `rewardEmissionRate` defines the number of rewards tokens distributed per
+second. This is a fixed rate and determines how many reward tokens the
+contract allocates every second to be distributed to all the keypers.
+* The reward earned by a user is proportional to the amount they have
+staked. The more tokens a user stakes, the larger their share of the rewards.
+* However, as more users stake tokens, the total supply increases. Since the reward rate per second is constant, the reward per token decreases, ensuring a steady overall reward rate but distributing it among more staked tokens.
+* As the total staked amount increases, the reward per token decreases. This
+means each user earns a smaller share of the rewards if more tokens are staked
+by others. This creates a balance where the total rewards distributed per
+second remains steady, but the individual rewards depend on the user's share
+of the total staked amount. This way, early stakers are rewarded more than
+late stakers, incentivizing users to stake early.
 
 The rewards are calculated using the following formula: 
 
-First, we must calculate the reward per token for each reward token of the
-current snapshot . The reward per token is calculated as follows:
+1. First, we must calculate the reward per token for each reward token of the
+current snapshot, i.e how much reward each staked token has earned since the
+last update. This is done by taking the elapsed time since the last update, multiplying it by the reward rate, and then dividing by the total supply of staked tokens.
 
 ```solidity
 uint256 rewardPerToken = totalStaked != 0 ? currentRewardPerToken[rewatdToken] +
@@ -192,7 +201,7 @@ uint256 rewardPerToken = totalStaked != 0 ? currentRewardPerToken[rewatdToken] +
 
 Where `rewardEmissionRate[rewardToken]` is the emission rate of the reward token and `totalStaked` is the total amount of SHU tokens staked by all keypers.
 
-Then, we calculate the keyper rewards for each reward token as follows:
+2. Then, we calculate the keyper rewards for each reward token as follows:
 
 ```solidity
 uint256 snapshotRewards = (staked[keyper] * (rewardPerToken - paidRewards[rewardToken])) / 1e18;
@@ -206,9 +215,9 @@ rewards are added to the `staked` mapping.
 ## Protocol Invariants
 
 1. The total amount of SHU tokens staked by all keypers must be equal to the
-total amount of SHU tokens staked by each keyper.
+total amount of SHU tokens staked by each keyper: `totalStaked = sum(staked[keyper])`.
 2. The rewards distributed across all keypers must be equal to the
-total amount of rewards distributed to each keyper.
+total amount of rewards distributed to each keyper: 
 3. The total amount of rewards distributed to all keypers must be equal to the
 total amount of rewards distributed to each reward token.
 4. The rewards distributed across all keypers should equal the accumulated rewards per token times the staked amount.
