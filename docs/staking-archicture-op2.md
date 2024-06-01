@@ -29,17 +29,21 @@ Transparant Proxy pattern where only the DAO has the permission to upgrade.
 
 ### `stake(uint256 amount)`
 
-Stake `amount` of SHU tokens. The caller must have approved the staking contract
-to transfer `amount` of SHU tokens on their behalf. Only addresses beloging to the 
-keyper mapping can call this function. Each call to this function will create a
-new stake with its own lock period.
+Stake `amount` of SHU tokens.
+
+* The caller must have approved the staking contract.
+to transfer `amount` of SHU tokens on their behalf.
+* Only addresses beloging to the keyper mapping can call this function. 
+* Each call to this function will create a new stake with its own lock period.
+* A minimum amount of SHU tokens must be staked.
 
 ### `unstake(uint256 stakeId)`
 
-Unstake the SHU tokens associated with `stakeId`. The caller will receive their
-staked SHU tokens back and any rewards they have accumulated for that specific
-stake. The caller must have staked for at least the stake `lockPeriod` before 
-they can unstake.
+Unstake the SHU tokens associated with `stakeId`. 
+
+* The caller will receive their staked SHU tokens back and any rewards they have
+accumulated for that specific stake. 
+* The caller must have staked for at least the stake `lockPeriod` before they can unstake.
 
 ### `claimRewards(uint256 stakeId)`
 
@@ -70,6 +74,10 @@ Add or remove a keyper.
 Set the staking token. The staking token must be ERC20 compliant.
 If the DAO upgrades the SHU token to a new contract, the DAO can update the
 staking token calling this function.
+
+### `setMinimumStake(uint256 newMinimumStake)`
+
+Set the new minimum amount of SHU tokens that must be staked. 
 
 ## View Functions
 
@@ -145,7 +153,7 @@ individually. The rewards for other ERC20 tokens are not compounded, meaning the
 meaning the rewards are calculated from the time the stake was created until the
 current timestamp.
  
-
+## Protocol Invariants
 
 
 
