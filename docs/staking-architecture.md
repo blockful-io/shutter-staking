@@ -68,7 +68,7 @@ rewards are auto compounded.
     * If keyper has a staked balance greater than 0 and the lock period is
       greater than the current the keyper lock period will remain the same.
       This way the keyper can trust that their tokens will never be locked for
-      more time than they agreed when they staked.
+      more time than they agree when they staked.
     * If a keyper has a staked balance greater than 0 and the new lock period is 
       less than the current, the new lock period will be considered and
       consequently the keyper will be allowed to unstake before. This is useful
