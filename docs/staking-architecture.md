@@ -2,14 +2,13 @@
 
 ## Overview
 
-The staking contract is a staking smart contract that allows keypers to stake SHU tokens
-effectively locking them up for a minimum period of time. In return, keypers receive rewards
-in the form of any ERC20 token the DAO decides to distribute, such as SHU or
-WETH. SHU rewards are auto compounded and not claimable, which means the rewards
-are added to the staked amount effectively increasing the staked amount and the 
-rewards paid to the keyper as a consequence. 
+The staking contract is a smart contract that enables keypers to stake SHU
+tokens for a minimum period. In exchange, keypers receive rewards in the form of
+any ERC20 token that the DAO chooses to distribute, such as SHU or WETH. SHU
+rewards are automatically compounded when the keyper state is updated and
+cannot be withdrawn, effectively increasing the rewards paid to the keyper due to the compounding effect.
 
-The staking contract is designed to be flexible and upgradable using the Transparant Proxy pattern where only the DAO has the permission to upgrade.
+The staking contract is designed to be customizable, with adjustable parameters that the DAO can change, such as the lock period, minimum stake, and reward emission. Additionally, the contract uses the Transparent Proxy pattern, with only the DAO having the authority to make upgrades.
 
 ### Security Considerations
 
@@ -30,85 +29,72 @@ The staking contract is designed to be flexible and upgradable using the Transpa
 
 ## Keyper Functions
 
-### `stake(uint256 amount)`: stake `amount` of SHU tokens
+### `stake(uint256 amount)`
 
-* The caller must have approved the staking contract.
-to transfer `amount` of SHU tokens on their behalf.
+* The caller must have approved the staking contract to transfer `amount` of SHU tokens on their behalf.
 * Only keypers can call this function.
 * A minimum amount of SHU tokens defined by the DAO must be staked.
 * If the keyper has already staked, the lock period will be the same as the
 first stake.
 
-### `unstake(uint256 amount)`: unstake the amount of SHU tokens
+### `unstake(uint256 amount)`
 
-* The caller must have staked for at least the stake `lockPeriod` before they
+* The caller must have staked for at least `lockPeriod` before they
   can unstake
 * The maximum amount of SHU tokens that can be unstaked is the amount staked
   plus the rewards accumulated until the current timestamp.
 
-### `claimRewards(address rewardToken, uint256 amount)`: claim rewards
+### `claimRewards(address rewardToken, uint256 amount)`
 
 * Claim any other token rewards excluding the SHU tokens rewards as the SHU tokens
 rewards are auto compounded. 
 * Only the keyper can claim their rewards.
 * The maximum amount of rewards that can be claimed can be calculated by calling
   the `calculateRewards` function.
-* If amount is 0, the caller will claim all the rewards accumulated until the
-  current timestamp.
+* If caller pass 0 in the `amount` paramater, the contract will claim all the
+  caller rewards accumulated until the current timestamp.
 
 ## Owner Functions (DAO)
 
-### `setLockPeriod(uint256 newLockPeriod)`: set the lock period
+### `setLockPeriod(uint256 newLockPeriod)`
 
-* The minimum amount of time a keyper must stake their SHU tokens before they can unstake
-* Measured in seconds
-* The new lock period will apply as follows:
-    * If keyper has 0 SHU tokens staked, the new lock period will apply to the
-      next stake.
-    * If keyper has a staked balance greater than 0 and the lock period is
-      greater than the current the keyper lock period will remain the same.
-      This way the keyper can trust that their tokens will never be locked for
-      more time than they agree when they staked.
-    * If a keyper has a staked balance greater than 0 and the new lock period is 
-      less than the current, the new lock period will be considered and
-      consequently the keyper will be allowed to unstake before. This is useful
-      in emergency situations where the DAO needs to reduce the lock period to
-      allow keypers to unstake their SHU tokens.
+* The minimum staking period for SHU tokens before they can be unstaked.
+* Measured in seconds.
+* If a keyper has 0 SHU tokens staked, the new lock period will apply to the next stake.
+* If a keyper has a staked balance greater than 0 and the lock period is greater than the current period, the keyper's lock period will remain the same. This ensures that the keyper can trust that their tokens will never be locked for longer than the agreed-upon period when they staked.
+*  If a keyper has a staked balance greater than 0 and the new lock period is less than the current one, the new lock period will be considered and the keyper will be allowed to unstake before. This is useful in emergency situations where the DAO needs to reduce the lock period to allow keypers to unstake their SHU tokens.
 
-### `configureReward(address rewardToken,uint256 emissionRate)`: configure rewards
+### `configureReward(address rewardToken,uint256 emissionRate)`ewards
 
-* Configure a reward token and the emission rate.
+* Configure a reward token and the respective emission rate.
 * The reward token must be ERC20 compliant. No native rewards are allowed.
 * If the reward token already exists, the emission rate will be updated.
 * If the reward token does not exist, a new reward token will be added.
 
-### `setKeyper(address keyper,bool status)`: add or remove a keyper.
+### `setKeyper(address keyper,bool status)`
+
+Add or remove a keyper.
 
 ### `setMinimumStake(uint256 newMinimumStake)`
 
-Set the new minimum amount of SHU tokens that must be staked. 
+Set the new minimum amount of SHU tokens that must be staked by keypers.
 
 ## View Functions
 
 ### `getStake(address keyper)`
 
-Get the amount of SHU tokens staked by `keyper`, including the SHU rewards accumulated until the current timestamp.
+Get the amount of SHU tokens staked by `keyper`, this includes the SHU rewards
+accumulated until the keyper last update timestamp.
 
 ### `getRewards(address keyper)`
 
-Get the amount of ERC20 rewards accumulated by `keyper` until the current timestamp excluding the SHU tokens rewards.
-
-### `getTotalStaked(address keyper)`
-
-Get the total amount of SHU tokens staked by `keyper` including the SHU rewards
-accumulated until the current timestamp. This function is useful for keypers to
-know how much they have staked considering all their stakes and how much SHU
-they have earned in rewards.
+Get the amount of ERC20 rewards accumulated by `keyper` until the last update
+timestamp, excluding the SHU tokens rewards as they are auto compounded.
 
 ### `getTotalStaked()`
 
 Get the total amount of SHU tokens staked for all the keyper, 
-including the SHU rewards accumulated until the current timestamp as the SHU rewards are compounded.
+including the compounded SHU rewards.
 
 ### `getLockPeriod()`
 
@@ -124,11 +110,9 @@ Get an array of reward tokens and their emission rates.
 
 * `stakingToken`: the SHU token address
 
-The staking token must be immutable because if we allow the DAO to change the
-staking token, the keypers will not be able to redeem their old stakes if the
-staking token has changed. If the DAO upgrades the SHU token to a new contract,
-then the DAO also must to redeploy the staking contract and ask the keypers to
-migrate their stakes to the new contract.
+The staking token must be immutable. If the DAO changes the staking token, the
+keypers will not be able to redeem their old stakes. 
+If the DAO upgrades the SHU token to a new contract, it must also redeploy the staking contract and ask the keypers to migrate their stakes to the new contract.
 
 ### Mutable Variables
 
@@ -136,13 +120,12 @@ migrate their stakes to the new contract.
   before they can unstake
   
 * `uint256 public minimumStake`: the minimum amount of SHU tokens that must be
-  staked
+  staked at the first stake
   
 * `uint256 public totalStaked`: the total amount of SHU tokens staked from all
-  keypers including the SHU rewards accumulated until the current timestamp
+  keypers including the compounded SHU rewards
   
-* `uint256 public lastUpdateTimestamp`: the last time the contract was updated
-  and the rewards were calculated
+* `uint256 public lastUpdateTimestamp`: the last time cumulativeRewards were updated
   
 ### Mappings 
 
@@ -165,9 +148,8 @@ accumulated rewards until the `lastUpdateTimestamp`.
 mapping from reward tokens to their emission rates.
 * `mapping(address keyper => (address rewardToken => uint256 rewards)) public
 unclaimedRewards`: a mapping from keypers to their rewards until the
-`stakes[keyper].lastUpdateTimestamp` excluding the SHU tokens rewards as the SHU tokens
-rewards are auto compounded. When a keyper claims rewards, the rewards claimed
-are subtracted from their unclaimed rewards.
+`stakes[keyper].lastUpdateTimestamp` excluding the SHU tokens rewards.
+When a keyper claims rewards, the rewards claimed are subtracted from this mapping.
 * `mapping(address rewardToken => uint256 rewardPerToken) public
   cumulativeRewards`: a mapping from reward tokens to the accumulated rewards
   per token from the beginning of the contract until the `lastUpdateTimestamp`.
@@ -181,8 +163,8 @@ are subtracted from their unclaimed rewards.
   
 ## Rewards Calculation Mechanismm
 
-* The rewards are recalculate and accrued every time the keyper interacts with the contract.
-This includes staking, unstaking, and claiming rewards. 
+* The rewards are recalculate and accrued every time the keyper interacts with
+state changes functions. This includes staking, unstaking, and claiming rewards. 
 * The `rewardEmissionRate` defines the number of rewards tokens distributed per
 second. This is a fixed rate and determines how many reward tokens the
 contract allocates every second to be distributed to all the keypers.
@@ -194,7 +176,7 @@ second remains steady, but the individual rewards depend on the user's share
 of the total staked amount and for how long they have staked. This way, early stakers are rewarded more than
 late stakers, incentivizing users to stake early.
 
-The rewards are calculated using the following formula: 
+Rewards are calculated using the following formula: 
 
 1. First, we must calculate the reward per token for each reward token of the
 current snapshot, i.e how much reward each staked token has earned since the
@@ -206,19 +188,20 @@ uint256 rewardPerToken = totalStaked != 0 ? (cumulativeRewards[rewardToken] +
 10***rewardToken.decimals()) / totalStaked) : cumulativeRewards[rewardToken];
 ```
 
-Where `rewardEmissionRate[rewardToken]` is the emission rate of the reward token and `totalStaked` is the total amount of SHU tokens staked by all keypers.
+Where `rewardEmissionRate[rewardToken]` is the emission rate of the reward token
+and `totalStaked` is the total amount of SHU tokens staked by all keypers.
+If the total staked amount is 0, no new rewards are distributed.
 
-2. Then, we calculate the current snapshot keyper rewards, i.e how much reward a
-   keyper has earned since the last update, for each reward token as follows:
+2. Then, we calculate the current keyper rewards, i.e how much reward a
+   keyper has earned since their last update, for each reward token as follows:
 
 ```solidity
 uint256 snapshotRewards = (stakes[keyper].amount * (rewardPerToken - keyperLastCumulativeRewards[keyper][rewardToken])) / (10**rewardToken.decimals());
 ```
 
-Where `paidRewards[keyper][rewardToken]` stores the 
-. For non-staking token rewards, the snapshot rewards are
+For non-staking token rewards, the snapshot rewards are
 added to the `unclaimedRewards` mapping. For staking token rewards, the snapshot
-rewards are added to the `staked` mapping.
+rewards are added to the `staked` mapping and `totalStaked` is increased.
  
 ## Protocol Invariants
 

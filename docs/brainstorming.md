@@ -1,8 +1,6 @@
 # Auto-compounding feature with rewards claimable at any time
 
-What must be done in order to allow keypers to claim before the `lockPeriod` has passed but yet
-have the auto-compounding feature? Effectively allowing keypers to claim their rewards at any
-time while the initial staked amount remains locked for the `lockPeriod`.
+How can we enable keypers to claim their rewards before the `lockPeriod` expires, while still maintaining the auto-compounding feature? This would allow keypers to claim their rewards whenever they want, while keeping the initial staked amount locked for the `lockPeriod`.
 
 ## Storage Modifications
 
