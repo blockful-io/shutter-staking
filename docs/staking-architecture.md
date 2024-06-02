@@ -146,29 +146,38 @@ migrate their stakes to the new contract.
   
 ### Mappings 
 
+```solidity
+struct Stake {
+    uint256 amount;
+    uint256 stakedTimestamp;
+    uint256 lockPeriod;
+    uint256 lastUpdateTimestamp;
+}
+```
+
 * `mapping(address keyper => bool) public keypers`: a mapping from keypers to
 their status. If the keyper is true, they are allowed to stake. If the keyper
 is false, they are not allowed to stake.
-* `mapping(address keyper => uint256 balance) public staked`: a
-mapping from keypers to the amount of SHU tokens they have staked including
+* `mapping(address keyper => Stake staked) public stakes`: a
+mapping from keypers to the amount of SHU tokens they have staked and the
+accumulated rewards until the `lastUpdateTimestamp`.
 * `mapping(address rewardToken => uint256 emissionRate) public rewardEmissionRate`: a
 mapping from reward tokens to their emission rates.
 * `mapping(address keyper => (address rewardToken => uint256 rewards)) public
-unclaimedRewards`: a mapping from keypers to their rewards for each stake until the
-`lastUpdateTimestamp` excluding the SHU tokens rewards as the SHU tokens
+unclaimedRewards`: a mapping from keypers to their rewards until the
+`stakes[keyper].lastUpdateTimestamp` excluding the SHU tokens rewards as the SHU tokens
 rewards are auto compounded. When a keyper claims rewards, the rewards claimed
-are subtracted from this mapping.
-* `mapping(address keyper => (address rewardToken => uint256 rewards)) public paidRewards`: a
-mapping from keypers to their rewards already paid until the
-`lastUpdateTimestamp`. Paid here does not mean the rewards were claimed, but
-that the rewards were already calculated and added to the `unclaimedRewards`
-* `mapping(address keyper => uint256 stakedTimestamp) public stakedTimestamp`: a
-mapping from keypers to the timestamp when they staked their SHU tokens for
-the first time. This is used to calculate the lock period.
+are subtracted from their unclaimed rewards.
 * `mapping(address rewardToken => uint256 rewardPerToken) public
-  currentRewardPerToken`: a mapping from reward tokens to the reward per token to
-  distribute from the `lastUpdateTimestamp` until the current timestamp, i.e the
-  accumulated rewards per token of the current snapshot.
+  cumulativeRewards`: a mapping from reward tokens to the accumulated rewards
+  per token from the beginning of the contract until the `lastUpdateTimestamp`.
+  By maintaining a cumulative reward per token, the contract can easily
+  calculate how much reward each staked token has earned over time. This is
+  essential for fairly distributing rewards to users based on how long and how
+  much they have staked.
+* `mapping(address keyper => (address rewardToken => uint256)) public
+  keyperLastCumulativeRewards`: a mapping from keypers to the cumulative
+  rewards per token at the time of their last update.
   
 ## Rewards Calculation Mechanismm
 
@@ -179,12 +188,10 @@ second. This is a fixed rate and determines how many reward tokens the
 contract allocates every second to be distributed to all the keypers.
 * The reward earned by a user is proportional to the amount they have
 staked. The more tokens a user stakes, the larger their share of the rewards.
-* However, as more users stake tokens, the total supply increases. Since the reward rate per second is constant, the reward per token decreases, ensuring a steady overall reward rate but distributing it among more staked tokens.
-* As the total staked amount increases, the reward per token decreases. This
-means each user earns a smaller share of the rewards if more tokens are staked
-by others. This creates a balance where the total rewards distributed per
+* As more users stake tokens, the total supply increases. Since the reward rate
+per second is constant, the reward per token decreases. This means each user earns a smaller share of the rewards if more tokens are staked by others. This creates a balance where the total rewards distributed per
 second remains steady, but the individual rewards depend on the user's share
-of the total staked amount. This way, early stakers are rewarded more than
+of the total staked amount and for how long they have staked. This way, early stakers are rewarded more than
 late stakers, incentivizing users to stake early.
 
 The rewards are calculated using the following formula: 
@@ -194,49 +201,41 @@ current snapshot, i.e how much reward each staked token has earned since the
 last update. This is done by taking the elapsed time since the last update, multiplying it by the reward rate, and then dividing by the total supply of staked tokens.
 
 ```solidity
-uint256 rewardPerToken = totalStaked != 0 ? currentRewardPerToken[rewatdToken] +
+uint256 rewardPerToken = totalStaked != 0 ? (cumulativeRewards[rewardToken] +
 ((block.timestamp - lastUpdateTimestamp) * rewardEmissionRate[rewardToken] *
-1e18) / totalStaked : currentRewardPerToken[rewardToken];
+10***rewardToken.decimals()) / totalStaked) : cumulativeRewards[rewardToken];
 ```
 
 Where `rewardEmissionRate[rewardToken]` is the emission rate of the reward token and `totalStaked` is the total amount of SHU tokens staked by all keypers.
 
-2. Then, we calculate the keyper rewards for each reward token as follows:
+2. Then, we calculate the current snapshot keyper rewards, i.e how much reward a
+   keyper has earned since the last update, for each reward token as follows:
 
 ```solidity
-uint256 snapshotRewards = (staked[keyper] * (rewardPerToken - paidRewards[rewardToken])) / 1e18;
+uint256 snapshotRewards = (stakes[keyper].amount * (rewardPerToken - keyperLastCumulativeRewards[keyper][rewardToken])) / (10**rewardToken.decimals());
 ```
 
-Where `paidRewards[rewardToken]` is the rewards already calculate to the keyper
-for the reward token. For non-staking token rewards, the snapshot rewards are
+Where `paidRewards[keyper][rewardToken]` stores the 
+. For non-staking token rewards, the snapshot rewards are
 added to the `unclaimedRewards` mapping. For staking token rewards, the snapshot
 rewards are added to the `staked` mapping.
  
 ## Protocol Invariants
 
-1. The total amount of SHU tokens staked by all keypers must be equal to the
-total amount of SHU tokens staked by each keyper: `totalStaked = sum(staked[keyper])`.
-2. The rewards distributed across all keypers must be equal to the
-total amount of rewards distributed to each keyper: 
-3. The total amount of rewards distributed to all keypers must be equal to the
-total amount of rewards distributed to each reward token.
-4. The rewards distributed across all keypers should equal the accumulated rewards per token times the staked amount.
-5. The total amount of SHU tokens staked by all keypers must be equal to the total
-amount of SHU tokens staked by each keyper plus the total amount of SHU
-tokens distributed as rewards to each keyper until the `lastUpdateTimestamp`.
-6. On unstake, `block.timestamp >= stakedTimestamp[msg.sender] + lockPeriod`.
-7. On unstake, the withdrawn amount must be less than or equal to `staked[msg.sender]`.
-8. `staked[keyper] >= minimumStake` for any keyper who has staked tokens.
-9. `currentRewardPerToken` should accurately reflect the time-weighted reward
-accumulation rate based on the `rewardEmissionRate`, `totalStaked`, and the
-`lastUpdateTimestamp`.
-9. Functions with access control (onlyOwner) should be callable only by the owner address.
-10. `rewardToken` addresses in `rewardEmissionRate` mapping must be valid ERC20 tokens.
-
-
- 
-
-
-
+1. The total amount of SHU tokens staked in the contract must be equal to the
+total amount of SHU tokens staked by each keyper: `totalStaked = sum(stakes[keyper])`.
+2. The total amount of rewards distributed to keypers must be equal or less to
+   the cumulative rewards per token times the total staked amount: `sum(unclaimedRewards[keyper]) <= sum(stakes[keyper] * rewardPerToken)`.
+3. On unstake, `block.timestamp >= stakes[msg.sender].stakedTimestamp +
+   stakes[msg.sender].lockPeriod` if global `lockPeriod` is greater or equal to
+    the stake lock period, otherwise `block.timestamp >= stakes[msg.sender].stakedTimestamp + lockPeriod`.
+4. On unstake, the withdrawn amount must be less than or equal to `stakes[msg.sender].amount`.
+5. `staked[keyper] >= minimumStake` for any keyper who has staked tokens.
+6. `cumulativeRewards` should accurately reflect the time-weighted rewards
+   accrued since the beginning of the contract.
+7. Functions with access control (onlyOwner) should be callable only by the owner address.
+8. `rewardToken` addresses in `rewardEmissionRate` mapping must be valid ERC20 tokens.
+12. If `block.timestamp` is equal to `lastUpdateTimestamp`, then
+    `rewardsPerToken(rewardToken) == cumulativeRewards[rewardToken]`.
 
 
