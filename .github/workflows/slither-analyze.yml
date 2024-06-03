@@ -1,6 +1,10 @@
 name: "Analyze an Ethereum project with Slither"
 
-on: "workflow_call"
+on:
+    workflow_dispatch:
+    push:
+        branches:
+            - "main"
 
 jobs:
   slither-analyze:
