@@ -1,0 +1,13 @@
+{"extends": "solhint:recommended",
+    "rules": {
+        "compiler-version": ["error", ">=0.8.0"],
+        "func-visibility": ["error", { "ignoreConstructors": true }],
+        "named-parameters-mapping": "warn",
+        "no-console": "off",
+        "one-contract-per-file": "off",
+    	"no-inline-assembly": "off",
+    	"no-empty-blocks": "off",
+    	"var-name-mixedcase": "off",
+    	"no-global-import": "off"
+    }
+}
