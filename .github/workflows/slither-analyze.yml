@@ -1,4 +1,4 @@
-name: "Analyze an Ethereum project with Slither"
+name: "Slither Analyze"
 
 on:
     workflow_dispatch:
