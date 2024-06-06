@@ -1,4 +1,4 @@
-# Staking Contract Architecture
+# Staking Architecture
 
 ## Overview
 
