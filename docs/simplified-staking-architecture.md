@@ -5,15 +5,13 @@
 Enables keypers to stake SHU tokens for a minimum period. In exchange, keypers receive rewards in the form of
 any ERC20 token that the DAO chooses to distribute, such as SHU or WETH. SHU rewards are automatically compounded when the contract state is updated and can be withdraw at any time. 
 
-There is two contract in this architecture:
+The architecture consists of two contracts:
 
 1. Staking Contract: The main contract where keypers can stake SHU tokens and claim rewards.
 2. Rewards Distribution Contract: A contract that distributes rewards to the
    staking contract.
    
-Both contracts are designed to be customizable, with adjustable parameters that
-the DAO can change, such as the lock period, minimum stake, and reward
-emission. Additionally, the contracts uses the Transparent Proxy pattern, with only the DAO having the authority to make upgrades.
+The contracts are designed to be customizable, with adjustable parameters such as the lock period, minimum stake, and reward emission. Additionally, the contracts uses the Transparent Proxy pattern, where only the DAO has the permission to upgrade the contract and call the owner functions defined below.
 
 ### Requirements
 
