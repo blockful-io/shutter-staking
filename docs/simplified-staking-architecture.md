@@ -13,7 +13,7 @@ The architecture consists of two contracts:
    
 The contracts are designed to be customizable, with adjustable parameters such as the lock period, minimum stake, and reward emission. Additionally, the contracts uses the Transparent Proxy pattern, where only the DAO has the permission to upgrade the contract and call the owner functions defined below.
 
-### Requirements
+## Requirements
 
 1. Compound at each interaction
 2. Unstake with individual lock period
@@ -21,7 +21,7 @@ The contracts are designed to be customizable, with adjustable parameters such a
 4. Minimum stake amount
 5. Only keyper can stake
 
-### Security Considerations
+## Security Considerations
 
 1. The staking contract uses the Ownable pattern where only the DAO has the
    permission to upgrade the contract and call the owner functions defined
@@ -80,7 +80,7 @@ their stakes. Each keyper can have multiple stakes with different lock periods.
 * `mapping(address keyper => uint256 balance) public balances`: a mapping from
 keypers to their balance of shares.
 
-## Rewards Calculation Mechanismm
+### Rewards Calculation Mechanismm
 
 * The rewards are withdrawn from the rewards distribution contract every time
 anyone interacts with state changes functions. This includes staking, unstaking, and claiming rewards. 
@@ -156,15 +156,15 @@ amount. The shares are burned when the keyper unstakes.
   their SHU tokens in emergency situations. 
   **TODO: Validade this statement with the DAO**
 
-### `setRewardsDistribution(address newRewardsDistribution)`
+#### `setRewardsDistribution(address newRewardsDistribution)`
 
 Set the new rewards distribution contract address.
 
-### `setKeyper(address keyper,bool status)`
+#### `setKeyper(address keyper,bool status)`
 
 Add or remove a keyper.
 
-### `setMinimumStake(uint256 newMinimumStake)`
+#### `setMinimumStake(uint256 newMinimumStake)`
 
 Set the new minimum amount of SHU tokens that must be staked by keypers.
 
@@ -178,9 +178,9 @@ Add a new reward token to the list of reward tokens.
 
 Remove a reward token from the list of reward tokens.
 
-## View Functions
+### View Functions
 
-### `getStake(address keyper, uint256 stakeId)`
+#### `getStake(address keyper, uint256 stakeId)`
 
 Get the stake info, including:
 
@@ -188,7 +188,7 @@ Get the stake info, including:
 2. The total of shares for the stake
 3. When the keyper can unstake
 
-### `getStakes(address keyper)`
+#### `getStakes(address keyper)`
 
 Get a list of stakes info for a keyper, including:
 
@@ -196,25 +196,25 @@ Get a list of stakes info for a keyper, including:
 2. The total of shares for each stake
 3. When the keyper can unstake
 
-### `getRewards(address keyper, address rewardToken)`
+#### `getRewards(address keyper, address rewardToken)`
 
 Get the amount of the reward token accumulated by `keyper` until the last update
 timestamp that the keyper has not claimed yet.
 
-### `getTotalRewards(address keyper)`
+#### `getTotalRewards(address keyper)`
 
 Get a list of all the reward tokens and the amount accumulated by `keyper` until
 the last update timestamp that the keyper has not claimed yet.
 
-### `totalSupply()`
+#### `totalSupply()`
 
 Get the shares supply.
 
-### `getBalanceOf(address keyper)`
+#### `getBalanceOf(address keyper)`
 
 Get the shares balance of a keyper.
 
-### `getLockPeriod()`
+#### `getLockPeriod()`
 
 Get the lock period that will be applied to new stakes.
 
@@ -268,11 +268,11 @@ Distribute the rewards for a specific reward token to the staking contract accum
 
 ### View Functions
 
-### `getRewardsConfiguration()`
+#### `getRewardsConfiguration()`
 
 Get an array of reward tokens and their emission rates.
 
-### `getRewardConfiguration(address rewardToken)`
+#### `getRewardConfiguration(address rewardToken)`
 
 Get the reward configuration for a specific reward token.
 

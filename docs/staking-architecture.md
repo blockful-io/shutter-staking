@@ -10,7 +10,7 @@ cannot be withdrawn, effectively increasing the rewards paid to the keyper due t
 
 The staking contract is designed to be customizable, with adjustable parameters that the DAO can change, such as the lock period, minimum stake, and reward emission. Additionally, the contract uses the Transparent Proxy pattern, with only the DAO having the authority to make upgrades.
 
-### Security Considerations
+## Security Considerations
 
 1. The staking contract uses the Ownable pattern where only the DAO has the
    permission to upgrade the contract and call the owner functions defined
