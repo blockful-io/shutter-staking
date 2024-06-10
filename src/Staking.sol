@@ -2,9 +2,55 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
 
-contract Staking is Ownable2Step {
+interface IRewardsDistributor {
+    function distributeRewards() external;
+}
+
+contract Staking is Ownable2StepUpgradeable {
+    //// ------------------------------------------------------------
+    //// ------------------------------------------------------------
+    //// ------------------- State Variables ------------------------
+    //// ------------------------------------------------------------
+    //// ------------------------------------------------------------
+
+    IERC20 public shu;
+    IRewardsDistributor public rewardsDistributor;
+    uint256 public totalSupply;
+    uint256 public lockPeriod; // lock period in seconds
+    uint256 public minStake;
+
+    //// ------------------------------------------------------------
+    //// ------------------------------------------------------------
+    //// ----------------------- Structs ----------------------------
+    //// ------------------------------------------------------------
+    //// ------------------------------------------------------------
+
+    struct Stake {
+        uint256 amount;
+        uint256 shares;
+        uint256 timestamp;
+        uint256 lockPeriod;
+    }
+
+    //// ------------------------------------------------------------
+    //// ------------------------------------------------------------
+    //// ------------------ Mappings/Arrays -------------------------
+    //// ------------------------------------------------------------
+    //// ------------------------------------------------------------
+
+    mapping(address keyper => Stake[]) public userStakes;
+    mapping(address keyper => uint256) public balances;
+    mapping(address keyper => bool isKeyper) public keypers;
+
+    address[] public rewardTokenList;
+
+    //// ------------------------------------------------------------
+    //// ------------------------------------------------------------
+    //// ------------------------ Events ----------------------------
+    //// ------------------------------------------------------------
+
     event Staked(
         address indexed user,
         uint256 indexed amount,
@@ -14,28 +60,31 @@ contract Staking is Ownable2Step {
     event Unstaked(address user, uint256 amount, uint256 shares);
     event ClaimRewards(address user, address rewardToken, uint256 rewards);
 
-    IERC20 public immutable shu;
-    RewardsDistributor public rewardsDistributor;
-    uint256 public totalSupply;
-    uint256 public lockPeriod; // lock period in seconds
-    uint256 public minStake;
-
-    struct Stake {
-        uint256 amount;
-        uint256 shares;
-        uint256 timestamp;
-        uint256 lockPeriod;
-    }
-
-    mapping(address keyper => Stake[]) public userStakes;
-    mapping(address keyper => uint256) public balances;
-    mapping(address keyper => bool isKeyper) public keypers;
-
-    address[] public rewardTokenList;
-
     /// @notice ensure logic contract is unusable
     constructor() {
         _disableInitializers();
+    }
+
+    /// --------------------------------------------------------
+    /// --------------------------------------------------------
+    /// ---------------------- Initialize ----------------------
+    /// --------------------------------------------------------
+    /// --------------------------------------------------------
+
+    /// @notice Initialize the bridge
+    function initialize(
+        address newOwner,
+        address stakingToken,
+        address _rewardsDistributor,
+        uint256 _lockPeriod,
+        uint256 _minStake
+    ) public initializer {
+        transferOwnership(newOwner);
+
+        shu = IERC20(stakingToken);
+        rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
+        lockPeriod = _lockPeriod;
+        minStake = _minStake;
     }
 
     function addRewardToken(IERC20 _rewardToken) external {
@@ -60,7 +109,7 @@ contract Staking is Ownable2Step {
             // If no shares exist, mint it 1:1 to the amount put in
             sharesToMint = _amount;
         } else {
-            // Calculate and mint the amount of shares the Shu is worth. The ratio will change over time, as shares are burned/minted and SHU distributed to this contract
+            // Calculate and mint the amount of shares the SHU is worth. The ratio will change over time, as shares are burned/minted and SHU distributed to this contract
             sharesToMint = (_amount * totalSupply) / totalShu;
         }
 
@@ -123,7 +172,7 @@ contract Staking is Ownable2Step {
         userStakes[msg.sender].pop();
     }
 
-    function claimRewards(address rewardToken, uint256 amount) public {
+    function claimRewards(address rewardToken, uint256 amount) external {
         rewardsDistributor.distributeRewards();
 
         IERC20 token = IERC20(rewardToken);
@@ -152,8 +201,4 @@ contract Staking is Ownable2Step {
         balances[user] -= amount;
         totalSupply -= amount;
     }
-}
-
-abstract contract RewardsDistributor {
-    function distributeRewards() external virtual;
 }

@@ -13,6 +13,11 @@ The architecture consists of two contracts:
 
 The contracts are designed to be customizable, with adjustable parameters such as the lock period, minimum stake, and reward emission. Additionally, the contracts uses the Transparent Proxy pattern, where only the DAO has the permission to upgrade the contract and call the owner functions defined below.
 
+## FAQ
+
+1. There is a end date for the rewards distribution?
+2. Is the stkSHU token transferable?
+
 ## Requirements
 
 1. Compound at each interaction
@@ -84,7 +89,7 @@ struct Stake {
     anyone interacts with state changes functions. This includes staking, unstaking, and claiming rewards.
     As the contract balance of SHU and other reward tokens increases, when the
     keyper decides to claim the rewards, they will get a better conversion rate from
-    shares (xSHU) to the reward token. As the staking token is SHU, when the rewards
+    shares (stkSHU) to the reward token. As the staking token is SHU, when the rewards
     are claimed, the SHU balance of the contract increases, causing a coumpound effect.
 -   For unstaking, the keyper also gets the SHU rewards accumulated.
 -   The reward earned by a user is proportional to the amount they have
