@@ -17,6 +17,26 @@ The contracts are designed to be customizable, with adjustable parameters such a
 
 1. There is a end date for the rewards distribution?
 2. Is the stkSHU token transferable?
+3. The lock period is the same for all stakes?
+   No. Each stake has an individual lock period decided by the current lock
+   period set by the DAO when the keyper stake. The lock period can be updated
+   by the DAO. If the new lock period is lower than the current one for that
+   stake, the new lock period will be considered. This ensures that the keyper
+   can trust that their tokens will never be locked for longer than the
+   agreed-upon period when they staked, while also allowing keyper to unstake
+   their tokens in emergency situations.
+4. The rewards are distributed per block or per second?
+   Per second
+5. The rewards are compounded automatically?
+   Yes. The rewards are compounded automatically when the contract state is
+   updated, i.e when anyone interacts with an non-view function.
+6. The rewards are calculated by the stake shares or the total amount of shares
+   the keyper has?
+   The rewards are calculated by the total amount of shares the keyper has. This
+   means that when the keyper claim rewards, they will claim the rewards for all
+   the stakes they have. The same applies for unstake, the keyper will receive
+   the rewards for all the stakes they have plus the SHU tokens for the
+   **stake** they are unstaking.
 
 ## Requirements
 

@@ -149,7 +149,10 @@ contract Staking is Ownable2StepUpgradeable {
         rewards = (shares * shu.balanceOf(address(this))) / totalSupply;
 
         _burn(sender, userStake.shares);
-        shu.transfer(sender, rewards);
+
+        uint256 amount = userStake.amount + rewards;
+
+        shu.transfer(sender, amount);
 
         // Claim other rewards (e.g., WETH)
         for (uint256 i = 0; i < rewardTokenList.length; i++) {
@@ -163,13 +166,13 @@ contract Staking is Ownable2StepUpgradeable {
             }
         }
 
-        emit Unstaked(msg.sender, rewards, userStake.shares);
+        emit Unstaked(sender, amount, userStake.shares);
 
         // Remove the stake from the user's stake array
-        userStakes[msg.sender][_stakeIndex] = userStakes[msg.sender][
-            userStakes[msg.sender].length - 1
+        userStakes[sender][_stakeIndex] = userStakes[sender][
+            userStakes[sender].length - 1
         ];
-        userStakes[msg.sender].pop();
+        userStakes[sender].pop();
     }
 
     function claimRewards(address rewardToken, uint256 amount) external {
