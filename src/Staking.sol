@@ -2,15 +2,16 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable2Step.sol";
 
-contract Staking {
-    event Stake(
+contract Staking is Ownable2Step {
+    event Staked(
         address indexed user,
         uint256 indexed amount,
         uint256 indexed shares,
         uint256 lockPeriod
     );
-    event Unstake(address user, uint256 amount, uint256 shares);
+    event Unstaked(address user, uint256 amount, uint256 shares);
     event ClaimRewards(address user, address rewardToken, uint256 rewards);
 
     IERC20 public immutable shu;
@@ -22,7 +23,7 @@ contract Staking {
     struct Stake {
         uint256 amount;
         uint256 shares;
-        uint256 stakedTimestamp;
+        uint256 timestamp;
         uint256 lockPeriod;
     }
 
@@ -32,9 +33,9 @@ contract Staking {
 
     address[] public rewardTokenList;
 
-    constructor(IERC20 _shu, uint256 _lockPeriod) {
-        shu = _shu;
-        rewardsDistributor = RewardsDistributor(msg.sender);
+    /// @notice ensure logic contract is unusable
+    constructor() {
+        _disableInitializers();
     }
 
     function addRewardToken(IERC20 _rewardToken) external {
@@ -74,7 +75,7 @@ contract Staking {
         userStakes[sender].push(
             Stake(_amount, sharesToMint, block.timestamp, lockPeriod)
         );
-        emit Stake(sender, _amount, sharesToMint, lockPeriod);
+        emit Staked(sender, _amount, sharesToMint, lockPeriod);
     }
 
     // Unlocks the staked + gained Shu and burns shares
@@ -86,7 +87,7 @@ contract Staking {
         Stake storage userStake = userStakes[sender][_stakeIndex];
 
         require(
-            block.timestamp >= userStake.stakeTimestamp + userStake.lockPeriod,
+            block.timestamp >= userStake.timestamp + userStake.lockPeriod,
             "Stake is still locked"
         );
 
@@ -108,12 +109,12 @@ contract Staking {
                 rewardToken.balanceOf(address(this))) / totalSupply;
 
             if (rewardAmount > 0) {
-                IERC20(rewardToken).transfer(msg.sender, rewardAmount);
-                emit ClaimRewards(msg.sender, rewardToken, rewardAmount);
+                IERC20(rewardToken).transfer(sender, rewardAmount);
+                emit ClaimRewards(sender, address(rewardToken), rewardAmount);
             }
         }
 
-        emit Unstake(msg.sender, rewards, userStake.shares);
+        emit Unstaked(msg.sender, rewards, userStake.shares);
 
         // Remove the stake from the user's stake array
         userStakes[msg.sender][_stakeIndex] = userStakes[msg.sender][
@@ -122,42 +123,34 @@ contract Staking {
         userStakes[msg.sender].pop();
     }
 
-    function claimRewards(address _rewardToken, uint256 _amount) public {
+    function claimRewards(address rewardToken, uint256 amount) public {
         rewardsDistributor.distributeRewards();
 
+        IERC20 token = IERC20(rewardToken);
+
+        address sender = msg.sender;
+
         // Calculate the user's total rewards for the specified reward token
-        uint256 totalRewards = balances[msg.sender]
-            .mul(rewardTokens[_rewardToken].balanceOf(address(this)))
-            .div(totalSupply);
+        uint256 totalRewards = (balances[sender] *
+            token.balanceOf(address(this))) / totalSupply;
 
         if (amount > totalRewards) {
             amount = totalRewards;
         }
 
         // Transfer the specified amount of rewards to the user
-        rewardTokens[_rewardToken].transfer(msg.sender, _amount);
-        emit ClaimRewards(msg.sender, _rewardToken, _amount);
+        token.transfer(sender, amount);
+        emit ClaimRewards(sender, rewardToken, amount);
     }
 
-    function getRewards(address user) external view returns (uint256[] memory) {
-        uint256[] memory rewards = new uint256[](rewardTokenList.length);
-        for (uint256 i = 0; i < rewardTokenList.length; i++) {
-            address rewardToken = rewardTokenList[i];
-            rewards[i] = balances[user]
-                .mul(rewardTokens[rewardToken].balanceOf(address(this)))
-                .div(totalSupply);
-        }
-        return rewards;
+    function _mint(address user, uint256 amount) private {
+        balances[user] += amount;
+        totalSupply += amount;
     }
 
-    function _mint(address user, uint256 amount) internal {
-        balances[user] = balances[user].add(amount);
-        totalSupply = totalSupply.add(amount);
-    }
-
-    function _burn(address user, uint256 amount) internal {
-        balances[user] = balances[user].sub(amount);
-        totalSupply = totalSupply.sub(amount);
+    function _burn(address user, uint256 amount) private {
+        balances[user] -= amount;
+        totalSupply -= amount;
     }
 }
 
