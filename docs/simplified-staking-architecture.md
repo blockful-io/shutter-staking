@@ -15,28 +15,26 @@ The contracts are designed to be customizable, with adjustable parameters such a
 
 ## FAQ
 
-1. There is a end date for the rewards distribution?
-2. Is the stkSHU token transferable?
-3. The lock period is the same for all stakes?
-   No. Each stake has an individual lock period decided by the current lock
-   period set by the DAO when the keyper stake. The lock period can be updated
-   by the DAO. If the new lock period is lower than the current one for that
-   stake, the new lock period will be considered. This ensures that the keyper
-   can trust that their tokens will never be locked for longer than the
-   agreed-upon period when they staked, while also allowing keyper to unstake
-   their tokens in emergency situations.
-4. The rewards are distributed per block or per second?
-   Per second
-5. The rewards are compounded automatically?
-   Yes. The rewards are compounded automatically when the contract state is
-   updated, i.e when anyone interacts with an non-view function.
-6. The rewards are calculated by the stake shares or the total amount of shares
-   the keyper has?
-   The rewards are calculated by the total amount of shares the keyper has. This
-   means that when the keyper claim rewards, they will claim the rewards for all
-   the stakes they have. The same applies for unstake, the keyper will receive
-   the rewards for all the stakes they have plus the SHU tokens for the
-   **stake** they are unstaking.
+1. Is there a deadline for distributing the rewards?
+   No, the rewards distribution will continue until the rewards contract is depleted.
+
+2. Can the stkSHU token be transferred?
+   No, the stkSHU token is non-transferable. Keyper can only unstake the SHU tokens they have staked.
+
+3. Is the lock period the same for all stakes?
+   No, each stake has an individual lock period determined by the current lock period set by the DAO at the time of keyper's stake. The lock period can be updated by the DAO. If the new lock period is shorter than the current one for that stake, the new lock period will be honored. This allows keyper to trust that their tokens will not be locked for longer than the originally agreed-upon period when they staked, and also enables keyper to unstake their tokens in emergency situations.
+
+4. Are the rewards distributed per second or per block?
+   Per second.
+
+5. Are the rewards automatically compounded?
+   Yes, the rewards are automatically compounded when the contract state is updated, i.e., when anyone interacts with a non-view function.
+
+6. Are the rewards calculated based on stake shares or the total amount of shares the keyper has?
+   The rewards are calculated based on the total amount of shares the keyper has. This means that when the keyper claims rewards, they will receive the rewards for all the stakes they have.
+
+7. When unstaking, are the rewards also transferred to the keyper?
+   The keyper has the option to choose whether they want to claim the rewards when they unstake. This is the default behavior.
 
 ## Requirements
 
@@ -130,9 +128,7 @@ struct Stake {
 
 #### `unstake(uint256 amount, uint256 stakeId)`
 
--   When unstaking, the keyper receives the SHU tokens they staked plus any rewards
-    they have earned. The SHU rewards are automatically compounded into the staked
-    amount. The shares are burned when the keyper unstakes.
+-   The shares are burned when the keyper unstakes.
 -   The caller must have staked for at least `lockPeriod` for the specific stake.
 -   If amount is greater than the user balance, the contract will unstake the
     maximum amount possible.
@@ -151,6 +147,13 @@ struct Stake {
 -   This function will call the `distributeRewards` function before claiming the
     rewards.
 -   The rewardToken must exist in the rewards distribution contract
+
+### `unstakeAndClaim(uint256 amount, uint256 stakeId)`
+
+-   Unstake the SHU tokens to the specified stakeId and claim the SHU rewards.
+-   The caller must have staked for at least `lockPeriod` for the specific stake.
+-   If amount is greater than the user staked plus the rewards, the contract will unstake the
+    maximum amount possible.
 
 #### `claimAllRewards()`
 
