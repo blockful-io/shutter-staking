@@ -83,7 +83,13 @@ contract Staking is Ownable2StepUpgradeable {
     /// --------------------------------------------------------
     /// --------------------------------------------------------
 
-    /// @notice Initialize the bridge
+    /// @notice Initialize the contract
+    /// @param newOwner The owner of the contract, i.e. the DAO contract address
+    /// @param stakingToken The address of the staking token, i.e. SHU
+    /// @param _rewardsDistributor The address of the rewards distributor
+    /// contract
+    /// @param _lockPeriod The lock period in seconds
+    /// @param _minStake The minimum stake amount
     function initialize(
         address newOwner,
         address stakingToken,
@@ -92,19 +98,22 @@ contract Staking is Ownable2StepUpgradeable {
         uint256 _minStake
     ) public initializer {
         transferOwnership(newOwner);
-
         shu = IERC20(stakingToken);
         rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
         lockPeriod = _lockPeriod;
         minStake = _minStake;
     }
 
-    function addRewardToken(IERC20 _rewardToken) external {
+    /// @notice Add a reward token
+    /// @dev Only the rewards distributor can add reward tokens
+    /// @param rewardToken The address of the reward token
+    function addRewardToken(address rewardToken) external {
         require(
             msg.sender == address(rewardsDistributor),
             "Only rewards distributor can add reward tokens"
         );
-        rewardTokenList.push(address(_rewardToken));
+
+        rewardTokenList.push(rewardToken);
     }
 
     // Locks SHU, update the user's shares (non-transferable)
