@@ -41,6 +41,7 @@ contract Staking is Ownable2StepUpgradeable {
     //// ------------------------------------------------------------
 
     mapping(address keyper => Stake[]) public userStakes;
+
     mapping(address keyper => uint256) public balances;
     mapping(address keyper => bool isKeyper) public keypers;
 
@@ -59,6 +60,17 @@ contract Staking is Ownable2StepUpgradeable {
     );
     event Unstaked(address user, uint256 amount, uint256 shares);
     event ClaimRewards(address user, address rewardToken, uint256 rewards);
+
+    /// --------------------------------------------------------
+    /// --------------------------------------------------------
+    /// ---------------------- Modifiers -----------------------
+    /// --------------------------------------------------------
+    /// --------------------------------------------------------
+
+    modifier onlyKeyper() {
+        require(isKeyper[msg.sender], "Only keypers can stake");
+        _;
+    }
 
     /// @notice ensure logic contract is unusable
     constructor() {
@@ -96,35 +108,49 @@ contract Staking is Ownable2StepUpgradeable {
     }
 
     // Locks SHU, update the user's shares (non-transferable)
-    function stake(uint256 _amount) external returns (uint256 sharesToMint) {
-        require(_amount >= minStake, "Amount is less than min stake");
+    function stake(
+        uint256 amount
+    ) external onlyKeyper returns (uint256 sharesToMint) {
+        address keyper = msg.sender;
+
+        // Get the keyper stakes
+        Stake[] storage stakes = userStakes[keyper];
+
+        // If the keyper has no stakes, the first stake must be at least the minimum stake
+        if (stakes.length == 0) {
+            require(
+                amount >= minStake,
+                "The first stake must be at least the minimum stake"
+            );
+        } else {
+            // TODO validate this
+            require(amount + balances[keyper] >= minStake, "Stake too low");
+        }
 
         // Before doing anything, get the unclaimed rewards first
         rewardsDistributor.distributeRewards();
 
-        // Gets the amount of Shu locked in the contract
+        // Gets the amount of staking token in the contract
         uint256 totalShu = shu.balanceOf(address(this));
 
         if (totalSupply == 0 || totalShu == 0) {
             // If no shares exist, mint it 1:1 to the amount put in
-            sharesToMint = _amount;
+            sharesToMint = amount;
         } else {
             // Calculate and mint the amount of shares the SHU is worth. The ratio will change over time, as shares are burned/minted and SHU distributed to this contract
-            sharesToMint = (_amount * totalSupply) / totalShu;
+            sharesToMint = (amount * totalSupply) / totalShu;
         }
 
-        address sender = msg.sender;
-
-        _mint(sender, sharesToMint);
+        // Mint the shares
+        _mint(keyper, sharesToMint);
 
         // Lock the SHU in the contract
-        shu.transferFrom(sender, address(this), _amount);
+        shu.transferFrom(keyper, address(this), amount);
 
         // Record the new stake
-        userStakes[sender].push(
-            Stake(_amount, sharesToMint, block.timestamp, lockPeriod)
-        );
-        emit Staked(sender, _amount, sharesToMint, lockPeriod);
+        stakes.push(Stake(amount, sharesToMint, block.timestamp, lockPeriod));
+
+        emit Staked(keyper, amount, sharesToMint, lockPeriod);
     }
 
     // Unlocks the staked + gained Shu and burns shares
