@@ -35,6 +35,10 @@ The contracts are designed to be customizable, with adjustable parameters such a
 
 7. When unstaking, are the rewards also transferred to the keyper?
    The keyper has the option to choose whether they want to claim the rewards when they unstake. This is the default behavior.
+8. Is there a minimum stake amount?
+   Yes, there is a minimum amount of SHU tokens that must be staked at the first
+   stake. This amount can be set by the DAO. If the keyper unstake, for the next
+   stake the amount plus the current stake amount must be greater than the minimum
 
 ## Requirements
 
@@ -88,7 +92,7 @@ If the DAO upgrades the SHU token to a new contract, it must also redeploy the s
 struct Stake {
     uint256 amount;
     uint256t shares;
-    uint256 stakedTimestamp;
+    uint256 timestamp;
     uint256 lockPeriod;
 }
 ```
@@ -122,7 +126,9 @@ struct Stake {
 -   When staking, the keyper receives shares in exchange for the SHU tokens they stake. The shares represent the keyper's ownership of the total staked amount and are used to calculate the rewards the keyper earns. The more shares a keyper has, the larger their share of the rewards.
 -   The caller must have approved the staking contract to transfer `amount` of SHU tokens on their behalf.
 -   Only keypers can call this function.
--   A minimum amount of SHU tokens defined by the DAO must be staked.
+-   A minimum amount of SHU tokens defined by the DAO must be staked at the
+    first stake. If the keyper unstakes, for the next stake the amount plus the
+    current stake amount must be greater than the minimum.
 -   Each stake has an individual lock period that must be respected before the
     keyper can unstake.
 
@@ -308,10 +314,10 @@ Get the reward configuration for a specific reward token.
 
 1. The total amount of SHU tokens staked in the contract must be equal to the
    total amount of SHU tokens staked by each keyper: `totalStaked = sum(stakes[keyper].amount)`.
-2. On unstake, `block.timestamp >= stakes[msg.sender].stakedTimestamp +
+2. On unstake, `block.timestamp >= stakes[msg.sender].timestamp +
 stakes[msg.sender].lockPeriod` if global `lockPeriod` is greater or equal to
    the stake lock period, otherwise `block.timestamp >=
-stakes[msg.sender].stakedTimestamp + lockPeriod`.
+stakes[msg.sender].timestamp + lockPeriod`.
 3. On unstake, the withdrawn amount must be less than or equal to `stakes[msg.sender].amount`.
 4. `stakes[keyper].amount >= minimumStake` for any keyper who has staked tokens.
 5. Functions with access control (onlyOwner) should be callable only by the owner address.
