@@ -13,6 +13,9 @@ interface IRewardsDistributor {
 
 // TODO should be pausable?
 contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
+    /*//////////////////////////////////////////////////////////////
+                               LIBRARIES
+    //////////////////////////////////////////////////////////////*/
     using SafeTransferLib for ERC20;
     using FixedPointMathLib for uint256;
 
@@ -89,6 +92,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
                                  MODIFIERS
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Ensure only keypers can stake
     modifier onlyKeyper() {
         require(isKeyper[msg.sender], "Only keypers can stake");
         _;
@@ -210,6 +214,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 amount
     ) external {
         /////////////////////////// CHECKS ///////////////////////////////
+
         require(
             _stakeIndex < keyperStakes[keyper].length,
             "Invalid stake index"
@@ -230,12 +235,18 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
                 "Keyper can't unstake below minStake"
             );
 
-            // check if the stake is still locked
-            require(
-                keyperStake.timestamp + keyperStake.lockPeriod <=
-                    block.timestamp,
-                "Stake is still locked"
-            );
+            if (lockPeriod < keyperStake.lockPeriod) {
+                require(
+                    keyperStake.timestamp + lockPeriod <= block.timestamp,
+                    "Stake is still locked"
+                );
+            } else {
+                require(
+                    keyperStake.timestamp + keyperStake.lockPeriod <=
+                        block.timestamp,
+                    "Stake is still locked"
+                );
+            }
         }
 
         /////////////////////////// EFFECTS ///////////////////////////////
@@ -293,6 +304,46 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         emit ClaimRewards(sender, rewardToken, amount);
     }
 
+    /*//////////////////////////////////////////////////////////////
+                         OWNABLE FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Set the rewards distributor contract
+    /// @param _rewardsDistributor The address of the rewards distributor contract
+    function setRewardsDistributor(
+        IRewardsDistributor _rewardsDistributor
+    ) external onlyOwner {
+        rewardsDistributor = _rewardsDistributor;
+    }
+
+    /// @notice Set the lock period
+    /// @param _lockPeriod The lock period in seconds
+    function setLockPeriod(uint256 _lockPeriod) external onlyOwner {
+        lockPeriod = _lockPeriod;
+    }
+
+    /// @notice Set the minimum stake amount
+    /// @param _minStake The minimum stake amount
+    function setMinStake(uint256 _minStake) external onlyOwner {
+        minStake = _minStake;
+    }
+
+    /// @notice Set a keyper
+    /// @param keyper The keyper address
+    /// @param isKeyper Whether the keyper is a keyper or not
+    function setKeyper(address keyper, bool isKeyper) external onlyOwner {
+        keypers[keyper] = isKeyper;
+    }
+
+    /// @notice Set multiple keypers
+    /// @param keypers The keyper addresses
+    /// @param isKeyper Whether the keypers are keypers or not
+    function setKeypers(address[] keypers, bool isKeyper) external onlyOwner {
+        for (uint256 i = 0; i < keypers.length; i++) {
+            keypers[keypers[i]] = isKeyper;
+        }
+    }
+
     /// @notice Get the total amount of shares the assets are worth
     /// @param assets The amount of assets
     function convertToShares(
@@ -314,7 +365,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     }
 
     /*//////////////////////////////////////////////////////////////
-                     TRANSFER LOGIC
+                              TRANSFER LOGIC
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Transfer is disabled
@@ -335,7 +386,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     }
 
     /*//////////////////////////////////////////////////////////////
-                     UNSTAKE LIMIT LOGIC
+                           UNSTAKE LIMIT LOGIC
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Get the maximum amount of assets a keyper can unstake
