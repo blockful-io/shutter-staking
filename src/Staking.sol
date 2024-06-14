@@ -367,6 +367,17 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         return supply == 0 ? shares : shares.mulDivDown(totalAssets(), supply);
     }
 
+    /// @notice Get the amount of SHU staked for all keypers
+    function totalAssets() public view virtual returns (uint256) {
+        return stakingToken.balanceOf(address(this));
+    }
+
+    /// @notice Get the maximum amount of assets a keyper can unstake
+    /// @param keyper The keyper address
+    function maxWithdraw(address keyper) public view virtual returns (uint256) {
+        return convertToAssets(balanceOf(keyper));
+    }
+
     /*//////////////////////////////////////////////////////////////
                               TRANSFER LOGIC
     //////////////////////////////////////////////////////////////*/
@@ -383,29 +394,5 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256
     ) public pure override returns (bool) {
         revert("Transfer is disabled");
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                           UNSTAKE LIMIT LOGIC
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Get the maximum amount of assets a keyper can unstake
-    /// @param keyper The keyper address
-    function maxWithdraw(address keyper) public view virtual returns (uint256) {
-        return convertToAssets(balanceOf(keyper));
-    }
-
-    /// @notice Get the maximum amount of shares a keyper can unstake
-    /// @param keyper The keyper address
-    function maxRedeem(address keyper) public view virtual returns (uint256) {
-        return balanceOf(keyper);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                           PRIVATE FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
-
-    function totalAssets() public view virtual returns (uint256) {
-        return stakingToken.balanceOf(address(this));
     }
 }
