@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity 0.8.25;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
@@ -249,9 +249,6 @@ contract Staking is Ownable2StepUpgradeable {
 
         // Before doing anything, get the unclaimed rewards first
         rewardsDistributor.distributeRewards();
-
-        // Gets the stake shares
-        uint256 keyperShares = keyperStake.shares;
 
         // Prevents the keyper from unstaking more than they have staked
         uint256 maxWithdrawAmount = maxWithdraw(keyper);
