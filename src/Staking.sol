@@ -1,32 +1,32 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.25;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
+import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensiions/ERC20VotesUpgradeable";
+import {SafeTransferLib} from "@solmate/utils/SafeTransferLib.sol";
+import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 
 interface IRewardsDistributor {
     function distributeRewards() external;
 }
 
-// TODO use safe transfer
-// TODO use FixedPointMath
-// TODO use ERC20
-contract Staking is Ownable2StepUpgradeable {
-    //// ------------------------------------------------------------
-    //// ------------------------------------------------------------
-    //// ----------------- Imutable Variables -----------------------
-    //// ------------------------------------------------------------
-    //// ------------------------------------------------------------
+// TODO should be pausable?
+contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
+    using SafeTransferLib for ERC20;
+    using FixedPointMathLib for uint256;
+
+    /*//////////////////////////////////////////////////////////////
+                               IMMUTABLES
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice the staking token, i.e. SHU
     /// @dev set in initialize, can't be changed
     IERC20 public shu;
 
-    //// ------------------------------------------------------------
-    //// ------------------------------------------------------------
-    //// ------------------ Mutable Variables -----------------------
-    //// ------------------------------------------------------------
-    //// ------------------------------------------------------------
+    /*//////////////////////////////////////////////////////////////
+                                 VARIABLES
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice the rewards distributor contract
     /// @dev only owner can change
@@ -44,11 +44,9 @@ contract Staking is Ownable2StepUpgradeable {
     /// @dev only owner can change
     uint256 public minStake;
 
-    //// ------------------------------------------------------------
-    //// ------------------------------------------------------------
-    //// ----------------------- Structs ----------------------------
-    //// ------------------------------------------------------------
-    //// ------------------------------------------------------------
+    /*//////////////////////////////////////////////////////////////
+                                 STRUCTS
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice the stake struct
     /// @dev timestamp is the time the stake was made
@@ -59,11 +57,9 @@ contract Staking is Ownable2StepUpgradeable {
         uint256 lockPeriod;
     }
 
-    //// ------------------------------------------------------------
-    //// ------------------------------------------------------------
-    //// ------------------ Mappings/Arrays -------------------------
-    //// ------------------------------------------------------------
-    //// ------------------------------------------------------------
+    /*//////////////////////////////////////////////////////////////
+                             MAPPINGS/ARRAYS
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice the keyper stakes mapping
     mapping(address keyper => Stake[]) public keyperStakes;
@@ -76,10 +72,9 @@ contract Staking is Ownable2StepUpgradeable {
 
     address[] public rewardTokenList;
 
-    //// ------------------------------------------------------------
-    //// ------------------------------------------------------------
-    //// ------------------------ Events ----------------------------
-    //// ------------------------------------------------------------
+    /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
 
     event Staked(
         address indexed user,
@@ -90,27 +85,19 @@ contract Staking is Ownable2StepUpgradeable {
     event Unstaked(address user, uint256 amount, uint256 shares);
     event ClaimRewards(address user, address rewardToken, uint256 rewards);
 
-    /// --------------------------------------------------------
-    /// --------------------------------------------------------
-    /// ---------------------- Modifiers -----------------------
-    /// --------------------------------------------------------
-    /// --------------------------------------------------------
+    /*//////////////////////////////////////////////////////////////
+                                 MODIFIERS
+    //////////////////////////////////////////////////////////////*/
 
     modifier onlyKeyper() {
         require(isKeyper[msg.sender], "Only keypers can stake");
         _;
     }
 
-    /// @notice ensure logic contract is unusable
+    /// @notice Ensure logic contract is unusable
     constructor() {
         _disableInitializers();
     }
-
-    /// --------------------------------------------------------
-    /// --------------------------------------------------------
-    /// ---------------------- Initialize ----------------------
-    /// --------------------------------------------------------
-    /// --------------------------------------------------------
 
     /// @notice Initialize the contract
     /// @param newOwner The owner of the contract, i.e. the DAO contract address
@@ -121,14 +108,20 @@ contract Staking is Ownable2StepUpgradeable {
     /// @param _minStake The minimum stake amount
     function initialize(
         address newOwner,
-        address stakingToken,
-        address _rewardsDistributor,
+        IERC20 stakingToken,
+        IRewardsDistributor _rewardsDistributor,
         uint256 _lockPeriod,
         uint256 _minStake
     ) public initializer {
+        // Does nothing but calls anyway for consistency
+        __ERC20Votes_init();
+        __Ownable2Step_init();
+
+        // Transfer ownership to the DAO contract
         transferOwnership(newOwner);
-        shu = IERC20(stakingToken);
-        rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
+
+        shu = stakingToken;
+        rewardsDistributor = _rewardsDistributor;
         lockPeriod = _lockPeriod;
         minStake = _minStake;
     }
@@ -321,6 +314,27 @@ contract Staking is Ownable2StepUpgradeable {
     }
 
     /*//////////////////////////////////////////////////////////////
+                     TRANSFER LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Transfer is disabled
+    function transfer(
+        address to,
+        uint256 value
+    ) public override returns (bool) {
+        revert("Transfer is disabled");
+    }
+
+    /// @notice Transfer is disabled
+    function transferFrom(
+        address from,
+        address to,
+        uint256 value
+    ) public override returns (bool) {
+        revert("Transfer is disabled");
+    }
+
+    /*//////////////////////////////////////////////////////////////
                      UNSTAKE LIMIT LOGIC
     //////////////////////////////////////////////////////////////*/
 
@@ -334,15 +348,5 @@ contract Staking is Ownable2StepUpgradeable {
     /// @param keyper The keyper address
     function maxRedeem(address owner) public view virtual returns (uint256) {
         return balanceOf[owner];
-    }
-
-    function _mint(address user, uint256 amount) private {
-        balances[user] += amount;
-        totalSupply += amount;
-    }
-
-    function _burn(address user, uint256 amount) private {
-        balances[user] -= amount;
-        totalSupply -= amount;
     }
 }
