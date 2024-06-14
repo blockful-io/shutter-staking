@@ -170,8 +170,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         emit Staked(keyper, amount, sharesToMint, lockPeriod);
     }
 
-    //function unstakeAll();
-    // function claimRewardsAndUnstake();
+    // TODO function unstakeAll();
+    // TODO function claimRewardsAndUnstake();
 
     /// @notice Unstake SHU
     ///          - If caller is a keyper only them can unstake
