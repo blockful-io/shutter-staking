@@ -27,7 +27,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
     /// @notice the staking token, i.e. SHU
     /// @dev set in initialize, can't be changed
-    IERC20 public shu;
+    IERC20 public stakingToken;
 
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
@@ -66,7 +66,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     mapping(address keyper => Stake[]) public keyperStakes;
 
     /// @notice how many SHU a keyper has staked
-    mapping(address keyper => uint256) public shuBalances;
+    mapping(address keyper => uint256) public stakingTokenBalances;
 
     /// TODO when remove keyper also unstake the first stake
     mapping(address keyper => bool isKeyper) public keypers;
@@ -103,14 +103,14 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
     /// @notice Initialize the contract
     /// @param newOwner The owner of the contract, i.e. the DAO contract address
-    /// @param stakingToken The address of the staking token, i.e. SHU
+    /// @param _stakingToken The address of the staking token, i.e. SHU
     /// @param _rewardsDistributor The address of the rewards distributor
     /// contract
     /// @param _lockPeriod The lock period in seconds
     /// @param _minStake The minimum stake amount
     function initialize(
         address newOwner,
-        IERC20 stakingToken,
+        IERC20 _stakingToken,
         IRewardsDistributor _rewardsDistributor,
         uint256 _lockPeriod,
         uint256 _minStake
@@ -122,22 +122,10 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Transfer ownership to the DAO contract
         transferOwnership(newOwner);
 
-        shu = stakingToken;
+        stakingToken = _stakingToken;
         rewardsDistributor = _rewardsDistributor;
         lockPeriod = _lockPeriod;
         minStake = _minStake;
-    }
-
-    /// @notice Add a reward token
-    /// @dev Only the rewards distributor can add reward tokens
-    /// @param rewardToken The address of the reward token
-    function addRewardToken(address rewardToken) external {
-        require(
-            msg.sender == address(rewardsDistributor),
-            "Only rewards distributor can add reward tokens"
-        );
-
-        rewardTokenList.push(rewardToken);
     }
 
     /// @notice Stake SHU
@@ -168,13 +156,13 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 sharesToMint = convertToShares(amount);
 
         // Update the keyper's SHU balance
-        shuBalances[keyper] += amount;
+        stakingTokenBalances[keyper] += amount;
 
         // Mint the shares
         _mint(keyper, sharesToMint);
 
         // Lock the SHU in the contract
-        shu.transferFrom(keyper, address(this), amount);
+        stakingToken.transferFrom(keyper, address(this), amount);
 
         // Record the new stake
         stakes.push(Stake(amount, sharesToMint, block.timestamp, lockPeriod));
@@ -196,7 +184,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     ///          - amount must be specified in SHU, not shares
     /// @param keyper The keyper address
     /// @param stakeIndex The index of the stake to unstake
-    /// @param amount The amount of SHU to unstake
+    /// @param amount The amount
+    /// TODO check for reentrancy
     function unstake(
         address keyper,
         uint256 stakeIndex,
@@ -220,7 +209,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
             // minStake must be respected after unstaking
             require(
-                shuBalances[keyper] - amount >= minStake,
+                stakingTokenBalances[keyper] - amount >= minStake,
                 "Keyper can't unstake below minStake"
             );
 
@@ -268,33 +257,39 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         /////////////////////////// INTERACTIONS ///////////////////////////
 
         // Transfer the SHU to the keyper
-        shu.transfer(keyper, amount);
+        stakingToken.transfer(keyper, amount);
 
         emit Unstaked(keyper, amount, shares);
     }
 
-    function claimRewards(address rewardToken, uint256 amount) external {
-        rewardsDistributor.distributeRewards();
+    /// @notice Claim reward for a specific reward token
+    /// @param rewardToken The address of the reward token
+    /// @param amount The amount of rewards to claim
+    function claimReward(IERC20 rewardToken, uint256 amount) external {
+        require(address(rewardToken) != address(0), "No native token rewards");
 
-        IERC20 token = IERC20(rewardToken);
+        // Before doing anything, get the unclaimed rewards first
+        rewardsDistributor.distributeRewards();
 
         address sender = msg.sender;
 
         // Calculate the user's total rewards for the specified reward token
-        uint256 totalRewards = (balanceOf(sender) *
-            token.balanceOf(address(this))) / totalSupply();
+        // TODO see this
+        uint256 totalRewards = (balanceOf(sender) * totalSupply()) /
+            rewardToken.balanceOf(address(this));
 
         if (amount > totalRewards) {
             amount = totalRewards;
         }
 
         // Transfer the specified amount of rewards to the user
-        token.transfer(sender, amount);
-        emit ClaimRewards(sender, rewardToken, amount);
+        rewardToken.transfer(sender, amount);
+
+        emit ClaimRewards(sender, address(rewardToken), amount);
     }
 
     /*//////////////////////////////////////////////////////////////
-                         OWNABLE FUNCTIONS
+                         RESTRICTED FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Set the rewards distributor contract
@@ -335,6 +330,22 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
             keypers[_keypers[i]] = isKeyper;
         }
     }
+
+    /// @notice Add a reward token
+    /// @dev Only the rewards distributor can add reward tokens
+    /// @param rewardToken The address of the reward token
+    function addRewardToken(address rewardToken) external {
+        require(
+            msg.sender == address(rewardsDistributor),
+            "Only rewards distributor can add reward tokens"
+        );
+
+        rewardTokenList.push(rewardToken);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            VIEW FUNCTIONS 
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Get the total amount of shares the assets are worth
     /// @param assets The amount of assets
@@ -395,6 +406,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     //////////////////////////////////////////////////////////////*/
 
     function totalAssets() public view virtual returns (uint256) {
-        return shu.balanceOf(address(this));
+        return stakingToken.balanceOf(address(this));
     }
 }
