@@ -11,14 +11,34 @@ interface IRewardsDistributor {
 contract Staking is Ownable2StepUpgradeable {
     //// ------------------------------------------------------------
     //// ------------------------------------------------------------
-    //// ------------------- State Variables ------------------------
+    //// ----------------- Imutable Variables -----------------------
     //// ------------------------------------------------------------
     //// ------------------------------------------------------------
 
+    /// @notice the staking token, i.e. SHU
+    /// @dev set in initialize, can't be changed
     IERC20 public shu;
+
+    //// ------------------------------------------------------------
+    //// ------------------------------------------------------------
+    //// ------------------ Mutable Variables -----------------------
+    //// ------------------------------------------------------------
+    //// ------------------------------------------------------------
+
+    /// @notice the rewards distributor contract
+    /// @dev only owner can change
     IRewardsDistributor public rewardsDistributor;
+
+    /// @notice the total amount of shares
+    /// @dev increases when users stake and decreases when users unstake
     uint256 public totalSupply;
-    uint256 public lockPeriod; // lock period in seconds
+
+    /// @notice the lock period in seconds
+    /// @dev only owner can change
+    uint256 public lockPeriod;
+
+    /// @notice the minimum stake amount
+    /// @dev only owner can change
     uint256 public minStake;
 
     //// ------------------------------------------------------------
@@ -27,6 +47,8 @@ contract Staking is Ownable2StepUpgradeable {
     //// ------------------------------------------------------------
     //// ------------------------------------------------------------
 
+    /// @notice the stake struct
+    /// @dev timestamp is the time the stake was made
     struct Stake {
         uint256 amount;
         uint256 shares;
@@ -40,9 +62,13 @@ contract Staking is Ownable2StepUpgradeable {
     //// ------------------------------------------------------------
     //// ------------------------------------------------------------
 
-    mapping(address keyper => Stake[]) public userStakes;
+    /// @notice the keyper stakes mapping
+    mapping(address keyper => Stake[]) public keyperStakes;
 
-    mapping(address keyper => uint256) public balances;
+    /// @notice how many SHU a keyper has staked
+    mapping(address keyper => uint256) public shuBalances;
+
+    /// TODO when remove keyper also unstake the first stake
     mapping(address keyper => bool isKeyper) public keypers;
 
     address[] public rewardTokenList;
@@ -116,14 +142,19 @@ contract Staking is Ownable2StepUpgradeable {
         rewardTokenList.push(rewardToken);
     }
 
-    // Locks SHU, update the user's shares (non-transferable)
-    function stake(
-        uint256 amount
-    ) external onlyKeyper returns (uint256 sharesToMint) {
+    /// @notice Stake SHU
+    ///          - The first stake must be at least the minimum stake
+    ///          - The SHU will be locked in the contract for the lock period
+    ///          - The keyper must approve the contract to spend the SHU before staking
+    ///          - The shares are non-transferable
+    ///          - Only keypers can stake
+    /// @param amount The amount of SHU to stake
+    /// @return sharesToMint The amount of shares minted
+    function stake(uint256 amount) external onlyKeyper {
         address keyper = msg.sender;
 
         // Get the keyper stakes
-        Stake[] storage stakes = userStakes[keyper];
+        Stake[] storage stakes = keyperStakes[keyper];
 
         // If the keyper has no stakes, the first stake must be at least the minimum stake
         if (stakes.length == 0) {
@@ -131,9 +162,6 @@ contract Staking is Ownable2StepUpgradeable {
                 amount >= minStake,
                 "The first stake must be at least the minimum stake"
             );
-        } else {
-            // TODO validate this
-            require(amount + balances[keyper] >= minStake, "Stake too low");
         }
 
         // Before doing anything, get the unclaimed rewards first
@@ -150,6 +178,9 @@ contract Staking is Ownable2StepUpgradeable {
             sharesToMint = (amount * totalSupply) / totalShu;
         }
 
+        // Update the keyper's SHU balance
+        shuBalances[keyper] += amount;
+
         // Mint the shares
         _mint(keyper, sharesToMint);
 
@@ -162,23 +193,59 @@ contract Staking is Ownable2StepUpgradeable {
         emit Staked(keyper, amount, sharesToMint, lockPeriod);
     }
 
-    // Unlocks the staked + gained Shu and burns shares
-    function unstake(uint256 _stakeIndex) external returns (uint256 rewards) {
-        address sender = msg.sender;
+    //function unstakeAll();
+    // function claimRewardsAndUnstake();
 
-        require(_stakeIndex < userStakes[sender].length, "Invalid stake index");
-
-        Stake storage userStake = userStakes[sender][_stakeIndex];
-
+    /// @notice Unstake SHU
+    ///          - If caller is a keyper only them can unstake
+    ///          - If caller is not a keyper anymore, anyone can unstake
+    ///          - If caller is not a keyepr anymore, lock period is ignored
+    ///          - Unstake can't never result in a user SHU balance < minStake
+    ///            if user is a keyper
+    /// @param keyper The keyper address
+    /// @param stakeIndex The index of the stake to unstake
+    /// @param amount The amount of SHU to unstake
+    function unstake(
+        address keyper,
+        uint256 stakeIndex,
+        uint256 amount
+    ) external {
+        /////////////////////////// CHECKS ///////////////////////////////
         require(
-            block.timestamp >= userStake.timestamp + userStake.lockPeriod,
-            "Stake is still locked"
+            _stakeIndex < keyperStakes[keyper].length,
+            "Invalid stake index"
         );
+
+        // Gets the keyper stake
+        Stake storage keyperStake = keyperStakes[keyper][_stakeIndex];
+
+        // checks below only apply if keyper is still a keyper
+        // if keyper is not a keyper anymore, anyone can unstake, lock period is
+        // ignored and minStake is not enforced
+        if (keypers[keyper]) {
+            require(msg.sender == keyper, "Only keyper can unstake");
+
+            // minStake must be respected after unstaking
+            require(
+                shuBalances[keyper] - amount >= minStake,
+                "Keyper can't unstake below minStake"
+            );
+
+            // check if the stake is still locked
+            require(
+                keyperStake.timestamp + keyperStake.lockPeriod <=
+                    block.timestamp,
+                "Stake is still locked"
+            );
+        }
+
+        /////////////////////////// EFFECTS ///////////////////////////////
 
         // Before doing anything, get the unclaimed rewards first
         rewardsDistributor.distributeRewards();
 
-        uint256 shares = userStake.shares;
+        // Gets the stake shares
+        uint256 shares = keyperStake.shares;
 
         // Calculates the amount of SHU the shares are worth
         rewards = (shares * shu.balanceOf(address(this))) / totalSupply;
@@ -204,10 +271,10 @@ contract Staking is Ownable2StepUpgradeable {
         emit Unstaked(sender, amount, userStake.shares);
 
         // Remove the stake from the user's stake array
-        userStakes[sender][_stakeIndex] = userStakes[sender][
-            userStakes[sender].length - 1
+        keyperStakes[sender][_stakeIndex] = keyperStakes[sender][
+            keyperStakes[sender].length - 1
         ];
-        userStakes[sender].pop();
+        keyperStakes[sender].pop();
     }
 
     function claimRewards(address rewardToken, uint256 amount) external {
