@@ -2,8 +2,9 @@
 pragma solidity 0.8.25;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
-import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensiions/ERC20VotesUpgradeable";
+import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
 import {SafeTransferLib} from "@solmate/utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 
@@ -12,6 +13,7 @@ interface IRewardsDistributor {
 }
 
 // TODO should be pausable?
+// TODO use SafeTransferLib to every calculation
 contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -34,10 +36,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @notice the rewards distributor contract
     /// @dev only owner can change
     IRewardsDistributor public rewardsDistributor;
-
-    /// @notice the total amount of shares
-    /// @dev increases when users stake and decreases when users unstake
-    uint256 public totalSupply;
 
     /// @notice the lock period in seconds
     /// @dev only owner can change
@@ -94,7 +92,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
     /// @notice Ensure only keypers can stake
     modifier onlyKeyper() {
-        require(isKeyper[msg.sender], "Only keypers can stake");
+        require(keypers[msg.sender], "Only keypers can stake");
         _;
     }
 
@@ -149,7 +147,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     ///          - The shares are non-transferable
     ///          - Only keypers can stake
     /// @param amount The amount of SHU to stake
-    /// @return sharesToMint The amount of shares minted
+    /// TODO check for reentrancy
     function stake(uint256 amount) external onlyKeyper {
         address keyper = msg.sender;
 
@@ -167,16 +165,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Before doing anything, get the unclaimed rewards first
         rewardsDistributor.distributeRewards();
 
-        // Gets the amount of staking token in the contract
-        uint256 totalShu = shu.balanceOf(address(this));
-
-        if (totalSupply == 0 || totalShu == 0) {
-            // If no shares exist, mint it 1:1 to the amount put in
-            sharesToMint = amount;
-        } else {
-            // Calculate and mint the amount of shares the SHU is worth. The ratio will change over time, as shares are burned/minted and SHU distributed to this contract
-            sharesToMint = (amount * totalSupply) / totalShu;
-        }
+        uint256 sharesToMint = convertToShares(amount);
 
         // Update the keyper's SHU balance
         shuBalances[keyper] += amount;
@@ -216,12 +205,12 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         /////////////////////////// CHECKS ///////////////////////////////
 
         require(
-            _stakeIndex < keyperStakes[keyper].length,
+            stakeIndex < keyperStakes[keyper].length,
             "Invalid stake index"
         );
 
         // Gets the keyper stake
-        Stake storage keyperStake = keyperStakes[keyper][_stakeIndex];
+        Stake storage keyperStake = keyperStakes[keyper][stakeIndex];
 
         // Checks below only apply if keyper is still a keyper
         // if keyper is not a keyper anymore, anyone can unstake, lock period is
@@ -262,7 +251,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 shares = convertToShares(amount);
 
         // Burn the shares
-        _burn(sender, shares);
+        _burn(keyper, shares);
 
         // Decrease the amount from the stake
         keyperStake.amount -= amount;
@@ -270,7 +259,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // If the stake is empty, remove it
         if (keyperStake.amount == 0) {
             // Remove the stake from the keyper's stake array
-            keyperStakes[keyper][_stakeIndex] = keyperStakes[keyper][
+            keyperStakes[keyper][stakeIndex] = keyperStakes[keyper][
                 keyperStakes[keyper].length - 1
             ];
             keyperStakes[keyper].pop();
@@ -292,8 +281,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         address sender = msg.sender;
 
         // Calculate the user's total rewards for the specified reward token
-        uint256 totalRewards = (balances[sender] *
-            token.balanceOf(address(this))) / totalSupply;
+        uint256 totalRewards = (balanceOf(sender) *
+            token.balanceOf(address(this))) / totalSupply();
 
         if (amount > totalRewards) {
             amount = totalRewards;
@@ -336,11 +325,14 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     }
 
     /// @notice Set multiple keypers
-    /// @param keypers The keyper addresses
+    /// @param _keypers The keyper addresses
     /// @param isKeyper Whether the keypers are keypers or not
-    function setKeypers(address[] keypers, bool isKeyper) external onlyOwner {
-        for (uint256 i = 0; i < keypers.length; i++) {
-            keypers[keypers[i]] = isKeyper;
+    function setKeypers(
+        address[] memory _keypers,
+        bool isKeyper
+    ) external onlyOwner {
+        for (uint256 i = 0; i < _keypers.length; i++) {
+            keypers[_keypers[i]] = isKeyper;
         }
     }
 
@@ -349,7 +341,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     function convertToShares(
         uint256 assets
     ) public view virtual returns (uint256) {
-        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
         return supply == 0 ? assets : assets.mulDivDown(supply, totalAssets());
     }
@@ -359,7 +351,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     function convertToAssets(
         uint256 shares
     ) public view virtual returns (uint256) {
-        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
         return supply == 0 ? shares : shares.mulDivDown(totalAssets(), supply);
     }
@@ -369,19 +361,16 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Transfer is disabled
-    function transfer(
-        address to,
-        uint256 value
-    ) public override returns (bool) {
+    function transfer(address, uint256) public pure override returns (bool) {
         revert("Transfer is disabled");
     }
 
     /// @notice Transfer is disabled
     function transferFrom(
-        address from,
-        address to,
-        uint256 value
-    ) public override returns (bool) {
+        address,
+        address,
+        uint256
+    ) public pure override returns (bool) {
         revert("Transfer is disabled");
     }
 
@@ -392,12 +381,20 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @notice Get the maximum amount of assets a keyper can unstake
     /// @param keyper The keyper address
     function maxWithdraw(address keyper) public view virtual returns (uint256) {
-        return convertToAssets(balanceOf[keyper]);
+        return convertToAssets(balanceOf(keyper));
     }
 
     /// @notice Get the maximum amount of shares a keyper can unstake
     /// @param keyper The keyper address
-    function maxRedeem(address owner) public view virtual returns (uint256) {
-        return balanceOf[owner];
+    function maxRedeem(address keyper) public view virtual returns (uint256) {
+        return balanceOf(keyper);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                           PRIVATE FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    function totalAssets() public view virtual returns (uint256) {
+        return shu.balanceOf(address(this));
     }
 }
