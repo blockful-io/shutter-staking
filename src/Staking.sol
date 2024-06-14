@@ -8,6 +8,9 @@ interface IRewardsDistributor {
     function distributeRewards() external;
 }
 
+// TODO use safe transfer
+// TODO use FixedPointMath
+// TODO use ERC20
 contract Staking is Ownable2StepUpgradeable {
     //// ------------------------------------------------------------
     //// ------------------------------------------------------------
@@ -202,6 +205,9 @@ contract Staking is Ownable2StepUpgradeable {
     ///          - If caller is not a keyepr anymore, lock period is ignored
     ///          - Unstake can't never result in a user SHU balance < minStake
     ///            if user is a keyper
+    ///          - If amount is greater than the keyper stake, the contract will
+    ///            transfer the maximum amount available not the requested amount
+    ///          - amount must be specified in SHU, not shares
     /// @param keyper The keyper address
     /// @param stakeIndex The index of the stake to unstake
     /// @param amount The amount of SHU to unstake
@@ -219,7 +225,7 @@ contract Staking is Ownable2StepUpgradeable {
         // Gets the keyper stake
         Stake storage keyperStake = keyperStakes[keyper][_stakeIndex];
 
-        // checks below only apply if keyper is still a keyper
+        // Checks below only apply if keyper is still a keyper
         // if keyper is not a keyper anymore, anyone can unstake, lock period is
         // ignored and minStake is not enforced
         if (keypers[keyper]) {
@@ -245,36 +251,36 @@ contract Staking is Ownable2StepUpgradeable {
         rewardsDistributor.distributeRewards();
 
         // Gets the stake shares
-        uint256 shares = keyperStake.shares;
+        uint256 keyperShares = keyperStake.shares;
 
-        // Calculates the amount of SHU the shares are worth
-        rewards = (shares * shu.balanceOf(address(this))) / totalSupply;
+        // Prevents the keyper from unstaking more than they have staked
+        uint256 maxWithdrawAmount = maxWithdraw(keyper);
+        amount = maxWithdrawAmount < amount ? maxWithdrawAmount : amount;
 
-        _burn(sender, userStake.shares);
+        // Calculates the amounf of shares to burn
+        uint256 shares = convertToShares(amount);
 
-        uint256 amount = userStake.amount + rewards;
+        // Burn the shares
+        _burn(sender, shares);
 
-        shu.transfer(sender, amount);
+        // Decrease the amount from the stake
+        keyperStake.amount -= amount;
 
-        // Claim other rewards (e.g., WETH)
-        for (uint256 i = 0; i < rewardTokenList.length; i++) {
-            IERC20 rewardToken = IERC20(rewardTokenList[i]);
-            uint256 rewardAmount = (shares *
-                rewardToken.balanceOf(address(this))) / totalSupply;
-
-            if (rewardAmount > 0) {
-                IERC20(rewardToken).transfer(sender, rewardAmount);
-                emit ClaimRewards(sender, address(rewardToken), rewardAmount);
-            }
+        // If the stake is empty, remove it
+        if (keyperStake.amount == 0) {
+            // Remove the stake from the keyper's stake array
+            keyperStakes[keyper][_stakeIndex] = keyperStakes[keyper][
+                keyperStakes[keyper].length - 1
+            ];
+            keyperStakes[keyper].pop();
         }
 
-        emit Unstaked(sender, amount, userStake.shares);
+        /////////////////////////// INTERACTIONS ///////////////////////////
 
-        // Remove the stake from the user's stake array
-        keyperStakes[sender][_stakeIndex] = keyperStakes[sender][
-            keyperStakes[sender].length - 1
-        ];
-        keyperStakes[sender].pop();
+        // Transfer the SHU to the keyper
+        shu.transfer(keyper, amount);
+
+        emit Unstaked(keyper, amount, shares);
     }
 
     function claimRewards(address rewardToken, uint256 amount) external {
@@ -295,6 +301,42 @@ contract Staking is Ownable2StepUpgradeable {
         // Transfer the specified amount of rewards to the user
         token.transfer(sender, amount);
         emit ClaimRewards(sender, rewardToken, amount);
+    }
+
+    /// @notice Get the total amount of shares the assets are worth
+    /// @param assets The amount of assets
+    function convertToShares(
+        uint256 assets
+    ) public view virtual returns (uint256) {
+        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? assets : assets.mulDivDown(supply, totalAssets());
+    }
+
+    /// @notice Get the total amount of assets the shares are worth
+    /// @param shares The amount of shares
+    function convertToAssets(
+        uint256 shares
+    ) public view virtual returns (uint256) {
+        uint256 supply = totalSupply; // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? shares : shares.mulDivDown(totalAssets(), supply);
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                     UNSTAKE LIMIT LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Get the maximum amount of assets a keyper can unstake
+    /// @param keyper The keyper address
+    function maxWithdraw(address keyper) public view virtual returns (uint256) {
+        return convertToAssets(balanceOf[keyper]);
+    }
+
+    /// @notice Get the maximum amount of shares a keyper can unstake
+    /// @param keyper The keyper address
+    function maxRedeem(address owner) public view virtual returns (uint256) {
+        return balanceOf[owner];
     }
 
     function _mint(address user, uint256 amount) private {
