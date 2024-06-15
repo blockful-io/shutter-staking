@@ -14,6 +14,7 @@ import {MockShu} from "../mocks/MockShu.sol";
 
 contract StakingUnitTest is Test {
     IStaking public staking;
+    MockShu public shu;
 
     uint256 constant lockPeriod = 60 * 24 * 30 * 6; // 6 months
     uint256 constant minStake = 50_000 * 1e18; // 50k
@@ -22,23 +23,17 @@ contract StakingUnitTest is Test {
 
     function setUp() public {
         // deploy mock shu
-        MockShu shu = new MockShu();
+        shu = new MockShu();
 
         shu.mint(keyper, 1_000_000 * 1e18);
 
         // deploy rewards distributor
-        address rewardsDistributor = address(new RewardsDistributor());
-
         address rewardsDistributionProxy = address(
             new TransparentUpgradeableProxy(
-                rewardsDistributor,
+                address(new RewardsDistributor()),
                 address(this),
-                ""
+                abi.encodeWithSignature("initialize(address)", address(this))
             )
-        );
-
-        RewardsDistributor(rewardsDistributionProxy).initialize(
-            address(this) // owner
         );
 
         // deploy staking
@@ -48,7 +43,7 @@ contract StakingUnitTest is Test {
             new TransparentUpgradeableProxy(stakingContract, address(this), "")
         );
 
-        Staking(address(stakingProxy)).initialize(
+        Staking(stakingProxy).initialize(
             address(this), // owner
             address(shu),
             address(rewardsDistributionProxy),
@@ -57,7 +52,17 @@ contract StakingUnitTest is Test {
         );
 
         staking = IStaking(stakingProxy);
+
+        IRewardsDistributor(rewardsDistributionProxy).addRewardConfiguration(
+            stakingProxy,
+            address(shu),
+            1e18
+        );
     }
+
+    /*//////////////////////////////////////////////////////////////
+                               HAPPY PATHS
+    //////////////////////////////////////////////////////////////*/
 
     function testAddKeyper() public {
         vm.expectEmit(address(staking));
@@ -68,14 +73,17 @@ contract StakingUnitTest is Test {
     function testStakeSucceed() public {
         testAddKeyper();
 
+        vm.startPrank(keyper);
+        shu.approve(address(staking), minStake);
+
         vm.expectEmit(true, true, true, true, address(staking));
         emit IStaking.Staked(
-            address(this),
+            keyper,
             minStake,
             minStake, // first stake, shares == amount
             lockPeriod
         );
-        vm.prank(keyper);
-        staking.stake(50_000 * 1e18);
+
+        staking.stake(minStake);
     }
 }

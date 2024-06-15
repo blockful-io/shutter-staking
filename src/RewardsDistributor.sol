@@ -98,10 +98,7 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
 
         uint256 id = rewardConfigurationsIds[receiver][token];
 
-        require(
-            rewardConfigurations[receiver].length > 0 && id > 0,
-            "No reward configuration found"
-        );
+        require(id > 0, "No reward configuration found");
 
         RewardConfiguration storage rewardConfiguration = rewardConfigurations[
             receiver
@@ -121,7 +118,6 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
         rewardConfiguration.lastUpdate = block.timestamp;
 
         // transfer the reward
-        // TODO change to safeTransfer
         IERC20(token).safeTransfer(receiver, reward);
     }
 }
