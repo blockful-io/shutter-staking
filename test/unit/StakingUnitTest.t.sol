@@ -58,6 +58,9 @@ contract StakingUnitTest is Test {
             address(shu),
             1e18
         );
+
+        // fund reward distribution
+        shu.transfer(rewardsDistributionProxy, 1_000_000 * 1e18);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -85,5 +88,21 @@ contract StakingUnitTest is Test {
         );
 
         staking.stake(minStake);
+
+        vm.stopPrank();
+    }
+
+    function testClaimRewardSucceed() public {
+        testStakeSucceed();
+
+        vm.warp(block.timestamp + 1000); // 1000 seconds later
+
+        uint256 claimAmount = 1_000e18; // 1 SHU per second is distributed
+
+        vm.expectEmit(true, true, true, true, address(staking));
+        emit IStaking.ClaimRewards(keyper, address(shu), claimAmount);
+
+        vm.prank(keyper);
+        staking.claimReward(shu, claimAmount);
     }
 }
