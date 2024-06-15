@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.20;
+pragma solidity 0.8.25;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -111,8 +111,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param _minStake The minimum stake amount
     function initialize(
         address newOwner,
-        IERC20 _stakingToken,
-        IRewardsDistributor _rewardsDistributor,
+        address _stakingToken,
+        address _rewardsDistributor,
         uint256 _lockPeriod,
         uint256 _minStake
     ) public initializer {
@@ -123,8 +123,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Transfer ownership to the DAO contract
         transferOwnership(newOwner);
 
-        stakingToken = _stakingToken;
-        rewardsDistributor = _rewardsDistributor;
+        stakingToken = IERC20(_stakingToken);
+        rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
         lockPeriod = _lockPeriod;
         minStake = _minStake;
     }
