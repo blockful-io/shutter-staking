@@ -53,7 +53,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @dev timestamp is the time the stake was made
     struct Stake {
         uint256 amount;
-        uint256 shares;
+        uint256 shares; // TODO is this really needed
         uint256 timestamp;
         uint256 lockPeriod;
     }
@@ -207,17 +207,13 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Gets the keyper stake
         Stake storage keyperStake = keyperStakes[keyper][stakeIndex];
 
+        // TODO I believe this branch will be never reached
+
         // Checks below only apply if keyper is still a keyper
         // if keyper is not a keyper anymore, anyone can unstake, lock period is
         // ignored and minStake is not enforced
         if (keypers[keyper]) {
             require(msg.sender == keyper, "Only keyper can unstake");
-
-            // minStake must be respected after unstaking
-            require(
-                totalLocked[keyper] - amount >= minStake,
-                "Keyper can't unstake below minStake"
-            );
 
             // If the lock period is less than the global lock period, the stake
             // must be locked for the lock period
@@ -235,19 +231,35 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
                     "Stake is still locked"
                 );
             }
-        }
 
-        // Keyper must have a shares balance greater than 0
-        uint256 maxWithdrawAmount = maxWithdraw(keyper);
+            // Keyper must have a shares balance greater than 0
+            uint256 maxWithdrawAmount = maxWithdraw(keyper);
 
-        require(maxWithdrawAmount > 0, "Keyper has no stake");
+            require(maxWithdrawAmount > 0, "Keyper has no stake");
 
-        /////////////////////////// EFFECTS ///////////////////////////////
+            // If the amount is greater than the max withdraw amount, the contract
+            // will transfer the maximum amount available not the requested amount
+            if (amount > maxWithdrawAmount) {
+                amount = maxWithdrawAmount;
+            }
 
-        // If the amount is greater than the max withdraw amount, the contract
-        // will transfer the maximum amount available not the requested amount
-        if (amount > maxWithdrawAmount) {
-            amount = maxWithdrawAmount;
+            // mininum staked must be respected after unstaking
+            require(
+                totalLocked[keyper] - amount >= minStake,
+                "Keyper can't unstake below minStake"
+            );
+        } else {
+            // doesn't exclude the min stake as the keyper is not a keyper anymore
+            uint256 maxWithdrawAmount = convertToAssets(balanceOf(keyper));
+
+            require(maxWithdrawAmount > 0, "Keyper has no stake");
+
+            // If the amount is greater than the max withdraw amount, the
+            // contract will transfer the maximum amount available not the
+            // requested amount
+            if (amount > maxWithdrawAmount) {
+                amount = maxWithdrawAmount;
+            }
         }
 
         // If the amount is still greater than the stake amount for the specified stake index
@@ -255,6 +267,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         if (amount > keyperStake.amount) {
             amount = keyperStake.amount;
         }
+
+        /////////////////////////// EFFECTS ///////////////////////////////
 
         // Get the unclaimed rewards
         rewardsDistributor.distributeReward(stakingToken);
@@ -267,6 +281,9 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         // Decrease the amount from the stake
         keyperStake.amount -= amount;
+
+        // Decrease the shares from the stake
+        keyperStake.shares -= shares;
 
         // Decrease the amount from the total locked
         totalLocked[keyper] -= amount;
@@ -294,9 +311,13 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     ///         - The keyper can claim the rewards at any time but not the principal
     ///         - The principal must be unstake by the unstake function and the
     ///           lock period for the principal must be respected
+    ///
     /// @param rewardToken The address of the reward token
     /// @param amount The amount of rewards to claim
-    function claimReward(IERC20 rewardToken, uint256 amount) external {
+    function claimReward(
+        IERC20 rewardToken,
+        uint256 amount
+    ) external onlyKeyper {
         require(address(rewardToken) != address(0), "No native token rewards");
 
         // Before doing anything, get the unclaimed rewards first
@@ -363,7 +384,13 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     function harvest(address keyper) external {
         rewardsDistributor.distributeRewards();
 
-        uint256 rewards = convertToAssets(balanceOf(keyper));
+        uint256 assets = convertToAssets(balanceOf(keyper));
+
+        // If the keyper has no assets, there are no rewards to claim
+        require(assets > 0, "No rewards to claim");
+
+        // Restake the rewards
+        stake(assets);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -451,19 +478,30 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         return stakingToken.balanceOf(address(this));
     }
 
-    /// @notice Get the maximum amount of assets a keyper can unstake, i.e
-    ///         how much their shares are worth in assets, including the principal plus
-    ///         the rewards minus the minimum stake
-    ///
+    /// @notice Calculates the maximum amount of assets that a keyper can withdraw,
+    ///         factoring in the principal and any un-compounded rewards.
+    ///         This function subtracts the minimum required stake and includes any amounts
+    ///         currently locked. As a result, the maximum withdrawable amount might be less
+    ///         than the total withdrawable at the current block timestamp.
     /// @param keyper The keyper address
+    /// @return The maximum amount of assets that a keyper can withdraw
     function maxWithdraw(address keyper) public view virtual returns (uint256) {
-        return convertToAssets(balanceOf(keyper));
+        return convertToAssets(balanceOf(keyper)) - minStake;
     }
 
+    /// @notice Get the maximum amount of rewards a keyper can claim
+    ///         Keyper claim can never result in a SHU balance less
+    ///         than the total locked amount
+    /// @param keyper The keyper address
+    /// @return The maximum amount of rewards a keyper can claim
     function maxClaimableRewards(
         address keyper
     ) public view virtual returns (uint256) {
-        return convertToAssets(balanceOf(keyper));
+        uint256 balance = balanceOf(keyper);
+
+        uint256 lockedInShares = convertToShares(totalLocked[keyper]);
+
+        return convertToAssets(balance - lockedInShares);
     }
 
     /*//////////////////////////////////////////////////////////////
