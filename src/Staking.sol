@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.25;
+pragma solidity 0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
 import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
 import {SafeTransferLib} from "@solmate/utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 
 interface IRewardsDistributor {
-    function distributeRewards() external;
+    function distributeReward(address token) external;
 }
 
 // TODO should be pausable?
@@ -18,7 +19,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
-    using SafeTransferLib for ERC20;
+    using SafeERC20 for IERC20;
     using FixedPointMathLib for uint256;
 
     /*//////////////////////////////////////////////////////////////
@@ -151,7 +152,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         }
 
         // Before doing anything, get the unclaimed rewards first
-        rewardsDistributor.distributeRewards();
+        rewardsDistributor.distributeReward(address(stakingToken));
 
         uint256 sharesToMint = convertToShares(amount);
 
@@ -271,7 +272,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         /////////////////////////// EFFECTS ///////////////////////////////
 
         // Get the unclaimed rewards
-        rewardsDistributor.distributeReward(stakingToken);
+        rewardsDistributor.distributeReward(address(stakingToken));
 
         // Calculates the amounf of shares to burn
         uint256 shares = convertToShares(amount);
@@ -321,14 +322,14 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         require(address(rewardToken) != address(0), "No native token rewards");
 
         // Before doing anything, get the unclaimed rewards first
-        rewardsDistributor.distributeRewards();
+        rewardsDistributor.distributeReward(address(stakingToken));
 
-        address sender = msg.sender;
+        address keyper = msg.sender;
 
         // If the reward token is the staking token, the user is claimingthe staking rewards
         if (rewardToken == stakingToken) {
             // Prevents the keyper from claiming more than they should
-            uint256 maxWithdrawAmount = maxWithdraw(sender);
+            uint256 maxWithdrawAmount = maxWithdraw(keyper);
 
             require(maxWithdrawAmount > 0, "No rewards to claim");
 
@@ -340,12 +341,12 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
             // the keyper assets after claiming the rewards must be greater or
             // equal the total locked amount
-            uint256 lockedInShares = convertToShares(totalLocked[sender]);
+            uint256 lockedInShares = convertToShares(totalLocked[keyper]);
 
             // Calculates the amount of shares to burn
             uint256 shares = convertToShares(amount);
 
-            uint256 balance = balanceOf(sender);
+            uint256 balance = balanceOf(keyper);
 
             // If the balance minus the shares is less than the locked in shares
             // the shares will be the balance minus the locked in shares
@@ -357,40 +358,25 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
             _burn(keyper, shares);
 
             // Transfer the SHU to the keyper
-            stakingToken.transfer(sender, amount);
-
-            emit ClaimRewards(sender, address(rewardToken), amount);
-
-            return;
+            rewardToken.safeTransfer(keyper, amount);
         }
 
-        // Calculate the user's total rewards for the specified reward token
-        // TODO check this
-        uint256 totalRewards = (balanceOf(sender) * totalSupply()) /
-            rewardToken.balanceOf(address(this));
-
-        if (amount > totalRewards) {
-            amount = totalRewards;
-        }
-
-        // Transfer the specified amount of rewards to the user
-        rewardToken.transfer(sender, amount);
-
-        emit ClaimRewards(sender, address(rewardToken), amount);
+        emit ClaimRewards(keyper, address(rewardToken), amount);
     }
 
     /// @notice Harvest rewards for a keyper
     /// @param keyper The keyper address
     function harvest(address keyper) external {
-        rewardsDistributor.distributeRewards();
+        rewardsDistributor.distributeReward(address(stakingToken));
 
         uint256 assets = convertToAssets(balanceOf(keyper));
 
         // If the keyper has no assets, there are no rewards to claim
         require(assets > 0, "No rewards to claim");
 
-        // Restake the rewards
-        stake(assets);
+        _burn(keyper, balanceOf(keyper));
+
+        _mint(keyper, convertToShares(assets));
     }
 
     /*//////////////////////////////////////////////////////////////

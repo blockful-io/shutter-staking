@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.25;
+pragma solidity 0.8.20;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {SafeTransferLib} from "@solmate/utils/SafeTransferLib.sol";
+import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
 
 interface IRewardsDistributor {
     function distributeRewards() external;
@@ -14,7 +16,7 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
-    using SafeTransferLib for ERC20;
+    using SafeERC20 for IERC20;
 
     /*//////////////////////////////////////////////////////////////
                                  STRUCTS
@@ -22,7 +24,7 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
 
     /// @notice the reward configuration
     struct RewardConfiguration {
-        ERC20 token; // the reward token
+        address token; // the reward token
         uint256 emissionRate; // emission per second
         uint256 lastUpdate; // last update timestamp
     }
@@ -31,7 +33,7 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
     mapping(address receiver => RewardConfiguration[])
         public rewardConfigurations;
 
-    mapping(address receiver => mapping(ERC20 => uint256 id))
+    mapping(address receiver => mapping(address token => uint256 id))
         public rewardConfigurationsIds;
 
     /// @notice Ensure logic contract is unusable
@@ -54,9 +56,12 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
     /// @param emissionRate The emission rate
     function addRewardConfiguration(
         address receiver,
-        ERC20 token,
+        address token,
         uint256 emissionRate
     ) external onlyOwner {
+        require(token != address(0), "No native rewards allowed");
+        require(emissionRate > 0, "Emission rate must be greater than 0");
+
         rewardConfigurations[receiver].push(
             RewardConfiguration(token, emissionRate, block.timestamp)
         );
@@ -73,7 +78,7 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
     /// @dev set the emission rate to 0 to stop the rewards
     function updateEmissonRate(
         address receiver,
-        ERC20 token,
+        address token,
         uint256 emissionRate
     ) external onlyOwner {
         uint256 id = rewardConfigurationsIds[receiver][token];
@@ -88,16 +93,18 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
 
     /// @notice Distribute rewards to receiver
     /// @param token The reward token
-    function distributeReward(ERC20 token) external {
-        uint256 id = rewardConfigurationsIds[msg.sender][token];
+    function distributeReward(address token) external {
+        address receiver = msg.sender;
+
+        uint256 id = rewardConfigurationsIds[receiver][token];
 
         require(
-            rewardConfigurations[msg.sender].length > 0 && id > 0,
+            rewardConfigurations[receiver].length > 0 && id > 0,
             "No reward configuration found"
         );
 
         RewardConfiguration storage rewardConfiguration = rewardConfigurations[
-            msg.sender
+            receiver
         ][id - 1];
 
         // difference in time since last update
@@ -114,6 +121,7 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
         rewardConfiguration.lastUpdate = block.timestamp;
 
         // transfer the reward
-        token.safeTransfer(msg.sender, reward);
+        // TODO change to safeTransfer
+        IERC20(token).safeTransfer(receiver, reward);
     }
 }
