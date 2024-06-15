@@ -59,4 +59,5 @@ interface IStaking {
     );
     event Unstaked(address user, uint256 amount, uint256 shares);
     event ClaimRewards(address user, address rewardToken, uint256 rewards);
+    event KeyperSet(address keyper, bool isKeyper);
 }

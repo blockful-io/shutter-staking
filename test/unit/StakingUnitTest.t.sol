@@ -13,20 +13,33 @@ import {IRewardsDistributor} from "../../src/interfaces/IRewardsDistributor.sol"
 import {MockShu} from "../mocks/MockShu.sol";
 
 contract StakingUnitTest is Test {
-    IStaking staking;
+    IStaking public staking;
+
+    uint256 constant lockPeriod = 60 * 24 * 30 * 6; // 6 months
+    uint256 constant minStake = 50_000 * 1e18; // 50k
+
+    address keyper = address(0x1234);
 
     function setUp() public {
         // deploy mock shu
         MockShu shu = new MockShu();
 
+        shu.mint(keyper, 1_000_000 * 1e18);
+
         // deploy rewards distributor
         address rewardsDistributor = address(new RewardsDistributor());
 
-        TransparentUpgradeableProxy rewardsDistributionProxy = new TransparentUpgradeableProxy(
+        address rewardsDistributionProxy = address(
+            new TransparentUpgradeableProxy(
                 rewardsDistributor,
                 address(this),
-                abi.encodeWithSignature("initialize(address)", address(this))
-            );
+                ""
+            )
+        );
+
+        RewardsDistributor(rewardsDistributionProxy).initialize(
+            address(this) // owner
+        );
 
         // deploy staking
         address stakingContract = address(new Staking());
@@ -34,9 +47,6 @@ contract StakingUnitTest is Test {
         address stakingProxy = address(
             new TransparentUpgradeableProxy(stakingContract, address(this), "")
         );
-
-        uint256 lockPeriod = 60 * 24 * 30 * 6; // 6 months
-        uint256 minStake = 50_000 * 1e18; // 50k
 
         Staking(address(stakingProxy)).initialize(
             address(this), // owner
@@ -47,5 +57,25 @@ contract StakingUnitTest is Test {
         );
 
         staking = IStaking(stakingProxy);
+    }
+
+    function testAddKeyper() public {
+        vm.expectEmit(address(staking));
+        emit IStaking.KeyperSet(keyper, true);
+        staking.setKeyper(keyper, true);
+    }
+
+    function testStakeSucceed() public {
+        testAddKeyper();
+
+        vm.expectEmit(true, true, true, true, address(staking));
+        emit IStaking.Staked(
+            address(this),
+            minStake,
+            minStake, // first stake, shares == amount
+            lockPeriod
+        );
+        vm.prank(keyper);
+        staking.stake(50_000 * 1e18);
     }
 }

@@ -47,7 +47,7 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
         __Ownable2Step_init();
 
         // Transfer ownership to the DAO contract
-        transferOwnership(newOwner);
+        _transferOwnership(newOwner);
     }
 
     /// @notice Add a reward configuration

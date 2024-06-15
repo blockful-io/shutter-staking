@@ -14,7 +14,8 @@ interface IRewardsDistributor {
 }
 
 // TODO should be pausable?
-// TODO use SafeTransferLib to every calculation
+// TODO is this vulnerable to first deposit attack?
+// TODO check calculations
 contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -86,6 +87,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     );
     event Unstaked(address user, uint256 amount, uint256 shares);
     event ClaimRewards(address user, address rewardToken, uint256 rewards);
+    event KeyperSet(address keyper, bool isKeyper);
 
     /*//////////////////////////////////////////////////////////////
                                  MODIFIERS
@@ -121,7 +123,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         __Ownable2Step_init();
 
         // Transfer ownership to the DAO contract
-        transferOwnership(newOwner);
+        _transferOwnership(newOwner);
 
         stakingToken = IERC20(_stakingToken);
         rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
@@ -408,6 +410,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param isKeyper Whether the keyper is a keyper or not
     function setKeyper(address keyper, bool isKeyper) external onlyOwner {
         keypers[keyper] = isKeyper;
+
+        emit KeyperSet(keyper, isKeyper);
     }
 
     /// @notice Set multiple keypers
@@ -419,6 +423,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     ) external onlyOwner {
         for (uint256 i = 0; i < _keypers.length; i++) {
             keypers[_keypers[i]] = isKeyper;
+
+            emit KeyperSet(_keypers[i], isKeyper);
         }
     }
 
