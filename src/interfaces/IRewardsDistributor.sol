@@ -22,6 +22,8 @@ interface IRewardsDistributor {
 
     function distributeReward(address token) external;
 
+    function distributeRewards() external;
+
     function rewardConfigurations(
         address receiver,
         uint256 index
