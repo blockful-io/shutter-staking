@@ -121,12 +121,27 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Distribute rewards
         rewardsDistributor.distributeRewards();
 
-        address[] rewardTokens = rewardsDistributor.rewardTokens();
-
         if (caller != address(0)) {
+            // If the caller has no assets or is the zero address, skip compound
+            if (assetsBefore != 0) {
+                // Calculate new assets after distributing rewards
+                uint256 assetsAfter = convertToAssets(balanceOf(caller));
+
+                // Calculate the difference in assets
+                uint256 newAssets = assetsAfter - assetsBefore;
+
+                // Convert the difference in assets to shares
+                uint256 shares = convertToShares(newAssets);
+
+                // Mint new shares based on the difference in assets
+                _mint(caller, shares);
+            }
+
+            address[] rewardTokens = rewardsDistributor.rewardTokens();
+
             for (uint256 i = 0; i < rewardTokens.length; i++) {
                 address token = rewardTokens[i];
-                // ignore staking token as it will be auto compounded
+                // ignore staking token as it was compounded above
                 if (token == address(stakingToken)) {
                     continue;
                 }
@@ -141,24 +156,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
                     .userRewardPerTokenPaid = rewardPerToken;
             }
         }
-
-        // If the caller has no assets or is the zero address, skip compound
-        if (assetsBefore == 0 || caller == address(0)) {
-            _;
-            return;
-        }
-
-        // Calculate new assets after distributing rewards
-        uint256 assetsAfter = convertToAssets(balanceOf(caller));
-
-        // Calculate the difference in assets
-        uint256 newAssets = assetsAfter - assetsBefore;
-
-        // Convert the difference in assets to shares
-        uint256 shares = convertToShares(newAssets);
-
-        // Mint new shares based on the difference in assets
-        _mint(caller, shares);
 
         _;
     }

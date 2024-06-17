@@ -76,16 +76,29 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
         address token,
         uint256 emissionRate
     ) external onlyOwner {
+        require(receiver != address(0), "Invalid receiver");
         require(token != address(0), "No native rewards allowed");
-        require(emissionRate > 0, "Emission rate must be greater than 0");
+
+        if (rewardConfigurations[receiver][token].emissionRate == 0) {
+            rewardTokens[receiver].push(token);
+        }
 
         rewardConfigurations[receiver][token] = RewardConfiguration(
             emissionRate,
             block.timestamp
         );
 
-        // TODO check if token already exists
-        rewardTokens[receiver].push(token);
+        if (emissionRate == 0) {
+            // remove the token from the list
+            address[] storage tokens = rewardTokens[receiver];
+            for (uint256 i = 0; i < tokens.length; i++) {
+                if (tokens[i] == token) {
+                    tokens[i] = tokens[tokens.length - 1];
+                    tokens.pop();
+                    break;
+                }
+            }
+        }
 
         emit RewardConfigurationSet(receiver, token, emissionRate);
     }
