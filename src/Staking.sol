@@ -45,6 +45,9 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @dev only owner can change
     uint256 public minStake;
 
+    /// @notice the last time the contract was updated
+    uint256 updatedAt;
+
     /*//////////////////////////////////////////////////////////////
                                  STRUCTS
     //////////////////////////////////////////////////////////////*/
@@ -58,6 +61,11 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 lockPeriod;
     }
 
+    struct Reward {
+        uint256 earned;
+        uint256 userRewardPerTokenPaid;
+    }
+
     /*//////////////////////////////////////////////////////////////
                              MAPPINGS/ARRAYS
     //////////////////////////////////////////////////////////////*/
@@ -66,12 +74,19 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     mapping(address keyper => Stake[]) public keyperStakes;
 
     /// TODO when remove keyper also unstake the first stake
+    /// @notice the keypers mapping
     mapping(address keyper => bool isKeyper) public keypers;
 
     /// @notice how many SHU a keyper has locked
     mapping(address keyper => uint256 totalLocked) public totalLocked;
 
-    address[] public rewardTokenList;
+    mapping(address token => uint256 rewardPerTokenStored)
+        public rewardPerTokenStored;
+
+    mapping(address keyper => mapping(address token => Reward keyperRewards))
+        public keyperRewards;
+
+    Reward[] public rewardTokenList;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -98,13 +113,15 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     }
 
     /// @notice Update rewards for a keyper
-    /// @param keyper The keyper address
+    /// @param caller The keyper address
     modifier updateRewards(address caller) {
         // Calculate current assets before distributing rewards
         uint256 assetsBefore = convertToAssets(balanceOf(caller));
 
         // Distribute rewards
         rewardsDistributor.distributeRewards();
+
+        if (caller != address(0)) {}
 
         // If the caller has no assets or is the zero address, skip compound
         if (assetsBefore == 0 || caller == address(0)) {
@@ -170,6 +187,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     function stake(
         uint256 amount
     ) external onlyKeyper updateRewards(msg.sender) {
+        /////////////////////////// CHECKS ///////////////////////////////
+
         address keyper = msg.sender;
 
         // Get the keyper stakes
@@ -183,6 +202,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
             );
         }
 
+        /////////////////////////// EFFECTS ///////////////////////////////
+
         uint256 sharesToMint = convertToShares(amount);
 
         // Update the keyper's SHU balance
@@ -190,6 +211,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         // Mint the shares
         _mint(keyper, sharesToMint);
+
+        /////////////////////////// INTERACTIONS ///////////////////////////
 
         // Lock the SHU in the contract
         stakingToken.safeTransferFrom(keyper, address(this), amount);
@@ -381,7 +404,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param _rewardsDistributor The address of the rewards distributor contract
     function setRewardsDistributor(
         IRewardsDistributor _rewardsDistributor
-    ) external onlyOwner updateRewards(0) {
+    ) external onlyOwner updateRewards(address(0)) {
         rewardsDistributor = _rewardsDistributor;
     }
 
@@ -389,7 +412,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param _lockPeriod The lock period in seconds
     function setLockPeriod(
         uint256 _lockPeriod
-    ) external onlyOwner updateRewards(0) {
+    ) external onlyOwner updateRewards(address(0)) {
         lockPeriod = _lockPeriod;
     }
 
@@ -397,7 +420,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param _minStake The minimum stake amount
     function setMinStake(
         uint256 _minStake
-    ) external onlyOwner updateRewards(0) {
+    ) external onlyOwner updateRewards(address(0)) {
         minStake = _minStake;
     }
 
@@ -407,7 +430,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     function setKeyper(
         address keyper,
         bool isKeyper
-    ) external onlyOwner updateRewards(0) {
+    ) external onlyOwner updateRewards(address(0)) {
         keypers[keyper] = isKeyper;
 
         emit KeyperSet(keyper, isKeyper);
@@ -419,24 +442,12 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     function setKeypers(
         address[] memory _keypers,
         bool isKeyper
-    ) external onlyOwner updateRewards(0) {
+    ) external onlyOwner updateRewards(address(0)) {
         for (uint256 i = 0; i < _keypers.length; i++) {
             keypers[_keypers[i]] = isKeyper;
 
             emit KeyperSet(_keypers[i], isKeyper);
         }
-    }
-
-    /// @notice Add a reward token
-    /// @dev Only the rewards distributor can add reward tokens
-    /// @param rewardToken The address of the reward token
-    function addRewardToken(address rewardToken) external updateRewards(0) {
-        require(
-            msg.sender == address(rewardsDistributor),
-            "Only rewards distributor can add reward tokens"
-        );
-
-        rewardTokenList.push(rewardToken);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -527,5 +538,23 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256
     ) public pure override returns (bool) {
         revert("Transfer is disabled");
+    }
+
+    function rewardPerToken(address token) private view returns (uint256) {
+        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        if (supply == 0) {
+            return rewardPerTokenStored[token];
+        }
+
+        (, uint256 rewardRate) = rewardsDistributor.rewardConfigurations(
+            address(this),
+            token
+        );
+
+        return
+            rewardPerTokenStored[token] +
+            (rewardRate * (block.timestamp - updatedAt) * 1e18) /
+            supply;
     }
 }
