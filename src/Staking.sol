@@ -86,8 +86,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     mapping(address keyper => mapping(address token => Reward keyperRewards))
         public keyperRewards;
 
-    Reward[] public rewardTokenList;
-
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -115,47 +113,57 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @notice Update rewards for a keyper
     /// @param caller The keyper address
     modifier updateRewards(address caller) {
+        uint256 sharesBefore = keyperRewards[caller][address(stakingToken)]
+            .userRewardPerTokenPaid;
+
         // Calculate current assets before distributing rewards
-        uint256 assetsBefore = convertToAssets(balanceOf(caller));
+        // TODO check whereas do this here or after distribute
+        uint256 assetsBefore = convertToAssets(sharesBefore);
 
         // Distribute rewards
         rewardsDistributor.distributeRewards();
 
         if (caller != address(0)) {
-            // If the caller has no assets or is the zero address, skip compound
-            if (assetsBefore != 0) {
-                // Calculate new assets after distributing rewards
-                uint256 assetsAfter = convertToAssets(balanceOf(caller));
-
-                // Calculate the difference in assets
-                uint256 newAssets = assetsAfter - assetsBefore;
-
-                // Convert the difference in assets to shares
-                uint256 shares = convertToShares(newAssets);
-
-                // Mint new shares based on the difference in assets
-                _mint(caller, shares);
-            }
-
             address[] rewardTokens = rewardsDistributor.rewardTokens();
 
             for (uint256 i = 0; i < rewardTokens.length; i++) {
                 address token = rewardTokens[i];
                 // ignore staking token as it was compounded above
                 if (token == address(stakingToken)) {
-                    continue;
+                    // If the caller has no assets or is the zero address, skip compound
+                    if (assetsBefore != 0) {
+                        // Calculate new assets after distributing rewards
+                        uint256 assetsAfter = convertToAssets(
+                            balanceOf(caller)
+                        );
+
+                        // Calculate the difference in assets
+                        uint256 newAssets = assetsAfter - assetsBefore;
+
+                        // Convert the difference in assets to shares
+                        uint256 shares = convertToShares(newAssets);
+
+                        // Mint new shares based on the difference in assets
+                        _mint(caller, shares);
+
+                        keyperRewards[caller][token]
+                            .userRewardPerTokenPaid = balanceOf(caller);
+                    }
+                } else {
+                    uint256 rewardPerToken = rewardPerToken(token);
+
+                    keyperRewards[caller][token].earned += (balanceOf(caller) *
+                        (rewardPerToken -
+                            keyperRewards[caller][token]
+                                .userRewardPerTokenPaid));
+
+                    keyperRewards[caller][token]
+                        .userRewardPerTokenPaid = rewardPerToken;
                 }
-
-                uint256 rewardPerToken = rewardPerToken(token);
-
-                keyperRewards[caller][token].earned += (balanceOf(caller) *
-                    (rewardPerToken -
-                        keyperRewards[caller][token].userRewardPerTokenPaid));
-
-                keyperRewards[caller][token]
-                    .userRewardPerTokenPaid = rewardPerToken;
             }
         }
+
+        updatedAt = block.timestamp;
 
         _;
     }
@@ -555,6 +563,10 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     ) public pure override returns (bool) {
         revert("Transfer is disabled");
     }
+
+    /*//////////////////////////////////////////////////////////////
+                              PRIVATE
+    //////////////////////////////////////////////////////////////*/
 
     function rewardPerToken(address token) private view returns (uint256) {
         uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
