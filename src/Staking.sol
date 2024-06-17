@@ -121,7 +121,26 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Distribute rewards
         rewardsDistributor.distributeRewards();
 
-        if (caller != address(0)) {}
+        address[] rewardTokens = rewardsDistributor.rewardTokens();
+
+        if (caller != address(0)) {
+            for (uint256 i = 0; i < rewardTokens.length; i++) {
+                address token = rewardTokens[i];
+                // ignore staking token as it will be auto compounded
+                if (token == address(stakingToken)) {
+                    continue;
+                }
+
+                uint256 rewardPerToken = rewardPerToken(token);
+
+                keyperRewards[caller][token].earned += (balanceOf(caller) *
+                    (rewardPerToken -
+                        keyperRewards[caller][token].userRewardPerTokenPaid));
+
+                keyperRewards[caller][token]
+                    .userRewardPerTokenPaid = rewardPerToken;
+            }
+        }
 
         // If the caller has no assets or is the zero address, skip compound
         if (assetsBefore == 0 || caller == address(0)) {
