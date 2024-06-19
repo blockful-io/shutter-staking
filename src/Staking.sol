@@ -56,7 +56,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @dev timestamp is the time the stake was made
     struct Stake {
         uint256 amount;
-        uint256 shares; // TODO is this really needed
         uint256 timestamp;
         uint256 lockPeriod;
     }
@@ -93,10 +92,9 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     event Staked(
         address indexed user,
         uint256 indexed amount,
-        uint256 indexed shares,
         uint256 lockPeriod
     );
-    event Unstaked(address user, uint256 amount, uint256 shares);
+    event Unstaked(address user, uint256 amount);
     event ClaimRewards(address user, address rewardToken, uint256 rewards);
     event KeyperSet(address keyper, bool isKeyper);
 
@@ -113,13 +111,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @notice Update rewards for a keyper
     /// @param caller The keyper address
     modifier updateRewards(address caller) {
-        uint256 sharesBefore = keyperRewards[caller][address(stakingToken)]
-            .userRewardPerTokenPaid;
-
-        // Calculate current assets before distributing rewards
-        // TODO check whereas do this here or after distribute
-        uint256 assetsBefore = convertToAssets(sharesBefore);
-
         // Distribute rewards
         rewardsDistributor.distributeRewards();
 
@@ -128,38 +119,15 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
             for (uint256 i = 0; i < rewardTokens.length; i++) {
                 address token = rewardTokens[i];
-                // ignore staking token as it was compounded above
-                if (token == address(stakingToken)) {
-                    // If the caller has no assets or is the zero address, skip compound
-                    if (assetsBefore != 0) {
-                        // Calculate new assets after distributing rewards
-                        uint256 assetsAfter = convertToAssets(
-                            balanceOf(caller)
-                        );
 
-                        // Calculate the difference in assets
-                        uint256 newAssets = assetsAfter - assetsBefore;
+                uint256 _rewardPerToken = rewardPerToken(token);
 
-                        // Convert the difference in assets to shares
-                        uint256 shares = convertToShares(newAssets);
+                keyperRewards[caller][token].earned += (balanceOf(caller) *
+                    (_rewardPerToken -
+                        keyperRewards[caller][token].userRewardPerTokenPaid));
 
-                        // Mint new shares based on the difference in assets
-                        _mint(caller, shares);
-
-                        keyperRewards[caller][token]
-                            .userRewardPerTokenPaid = balanceOf(caller);
-                    }
-                } else {
-                    uint256 _rewardPerToken = rewardPerToken(token);
-
-                    keyperRewards[caller][token].earned += (balanceOf(caller) *
-                        (_rewardPerToken -
-                            keyperRewards[caller][token]
-                                .userRewardPerTokenPaid));
-
-                    keyperRewards[caller][token]
-                        .userRewardPerTokenPaid = _rewardPerToken;
-                }
+                keyperRewards[caller][token]
+                    .userRewardPerTokenPaid = _rewardPerToken;
             }
         }
 
@@ -207,10 +175,11 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     ///          - The shares are non-transferable
     ///          - Only keypers can stake
     /// @param amount The amount of SHU to stake
+    /// @return The index of the stake
     /// TODO check for reentrancy
     function stake(
         uint256 amount
-    ) external onlyKeyper updateRewards(msg.sender) {
+    ) external onlyKeyper updateRewards(msg.sender) returns (uint256) {
         /////////////////////////// CHECKS ///////////////////////////////
 
         address keyper = msg.sender;
@@ -228,13 +197,11 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         /////////////////////////// EFFECTS ///////////////////////////////
 
-        uint256 sharesToMint = convertToShares(amount);
-
         // Update the keyper's SHU balance
         totalLocked[keyper] += amount;
 
         // Mint the shares
-        _mint(keyper, sharesToMint);
+        _mint(keyper, amount);
 
         /////////////////////////// INTERACTIONS ///////////////////////////
 
@@ -242,9 +209,11 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         stakingToken.safeTransferFrom(keyper, address(this), amount);
 
         // Record the new stake
-        stakes.push(Stake(amount, sharesToMint, block.timestamp, lockPeriod));
+        stakes.push(Stake(amount, block.timestamp, lockPeriod));
 
-        emit Staked(keyper, amount, sharesToMint, lockPeriod);
+        emit Staked(keyper, amount, lockPeriod);
+
+        return stakes.length - 1;
     }
 
     // TODO function unstakeAll();
@@ -312,7 +281,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
             maxWithdrawAmount = maxWithdraw(keyper, keyperStake.amount);
         } else {
             // doesn't exclude the min stake and locked staked as the keyper is not a keyper anymore
-            maxWithdrawAmount = convertToAssets(balanceOf(keyper));
+            maxWithdrawAmount = balanceOf(keyper);
         }
 
         require(maxWithdrawAmount > 0, "Keyper has no stake");
@@ -332,17 +301,11 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         /////////////////////////// EFFECTS ///////////////////////////////
 
-        // Calculates the amounf of shares to burn
-        uint256 shares = convertToShares(amount);
-
         // Burn the shares
-        _burn(keyper, shares);
+        _burn(keyper, amount);
 
         // Decrease the amount from the stake
         keyperStake.amount -= amount;
-
-        // Decrease the shares from the stake
-        keyperStake.shares -= shares;
 
         // Decrease the amount from the total locked
         totalLocked[keyper] -= amount;
@@ -361,7 +324,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Transfer the SHU to the keyper
         stakingToken.safeTransfer(keyper, amount);
 
-        emit Unstaked(keyper, amount, shares);
+        emit Unstaked(keyper, amount);
     }
 
     /// @notice Claim reward for a specific reward token
@@ -398,20 +361,16 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
                 amount = maxWithdrawAmount;
             }
 
-            // Calculates the amount of shares to burn
-            uint256 shares = convertToShares(amount);
-
             // If the balance minus the shares is less than the locked in shares
             // the keyper can't claim below the total locked amount
             // TODO I think this is never going to happen
             require(
-                balanceOf(keyper) - shares >=
-                    convertToShares(totalLocked[keyper]),
+                balanceOf(keyper) - amount >= totalLocked[keyper],
                 "Keyper can't claim below total locked"
             );
 
             // Burn the shares
-            _burn(keyper, shares);
+            _burn(keyper, amount);
 
             // Transfer the SHU to the keyper
             rewardToken.safeTransfer(keyper, amount);
@@ -478,32 +437,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
                             VIEW FUNCTIONS 
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Get the total amount of shares the assets are worth
-    /// @param assets The amount of assets
-    function convertToShares(
-        uint256 assets
-    ) public view virtual returns (uint256) {
-        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? assets : assets.mulDivDown(supply, totalAssets());
-    }
-
-    /// @notice Get the total amount of assets the shares are worth
-    /// @param shares The amount of shares
-    /// y = shares * totalAssets() / totalSupply()
-    function convertToAssets(
-        uint256 shares
-    ) public view virtual returns (uint256) {
-        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? shares : shares.mulDivDown(totalAssets(), supply);
-    }
-
-    /// @notice Get the amount of SHU staked for all keypers
-    function totalAssets() public view virtual returns (uint256) {
-        return stakingToken.balanceOf(address(this));
-    }
-
     /// @notice Calculates the maximum amount of assets that a keyper can withdraw,
     ///         factoring in the principal and any un-compounded rewards.
     ///         This function subtracts the minimum required stake and includes any amounts
@@ -514,7 +447,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @return The maximum amount of assets that a keyper can withdraw
     function maxWithdraw(address keyper) public view virtual returns (uint256) {
         return
-            convertToAssets(balanceOf(keyper)) -
+            balanceOf(keyper) -
             (totalLocked[keyper] >= minStake ? minStake : totalLocked[keyper]);
     }
 
@@ -523,27 +456,12 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 unlockedAmount
     ) public view virtual returns (uint256) {
         return
-            convertToAssets(balanceOf(keyper)) -
+            balanceOf(keyper) -
             (
                 (totalLocked[keyper] - unlockedAmount) >= minStake
                     ? minStake
                     : totalLocked[keyper]
             );
-    }
-
-    /// @notice Get the maximum amount of rewards a keyper can claim
-    ///         Keyper claim can never result in a SHU balance less
-    ///         than the total locked amount
-    /// @param keyper The keyper address
-    /// @return The maximum amount of rewards a keyper can claim
-    function maxClaimableRewards(
-        address keyper
-    ) public view virtual returns (uint256) {
-        uint256 balance = balanceOf(keyper);
-
-        uint256 lockedInShares = convertToShares(totalLocked[keyper]);
-
-        return convertToAssets(balance - lockedInShares);
     }
 
     /*//////////////////////////////////////////////////////////////

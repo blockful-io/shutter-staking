@@ -13,7 +13,7 @@ interface IStaking {
         uint256 _minStake
     ) external;
 
-    function stake(uint256 amount) external;
+    function stake(uint256 amount) external returns (uint256);
 
     function unstake(
         address keyper,

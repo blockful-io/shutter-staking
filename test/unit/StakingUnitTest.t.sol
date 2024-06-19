@@ -75,7 +75,7 @@ contract StakingUnitTest is Test {
         staking.setKeyper(keyper1, true);
     }
 
-    function testStakeSucceed() public {
+    function testStakeSucceed() public returns (uint256 stakeIndex) {
         testAddKeyper();
 
         vm.startPrank(keyper1);
@@ -89,23 +89,9 @@ contract StakingUnitTest is Test {
             lockPeriod
         );
 
-        staking.stake(minStake);
+        stakeIndex = staking.stake(minStake);
 
         vm.stopPrank();
-    }
-
-    function testClaimRewardSucceed() public {
-        testStakeSucceed();
-
-        vm.warp(block.timestamp + 1000); // 1000 seconds later
-
-        uint256 claimAmount = 1_000e18; // 1 SHU per second is distributed
-
-        vm.expectEmit(true, true, true, true, address(staking));
-        emit IStaking.ClaimRewards(keyper1, address(shu), claimAmount);
-
-        vm.prank(keyper1);
-        staking.claimReward(shu, claimAmount);
     }
 
     function testMultipleKeyperStakeSucceed() public {
@@ -126,22 +112,10 @@ contract StakingUnitTest is Test {
         staking.claimReward(shu, 0);
     }
 
-    function testHarvestAndClaimRewardSucceed() public {
+    function testClaimRewardSucceed() public {
         testStakeSucceed();
 
-        vm.warp(block.timestamp + 500); // 500 seconds later
-
-        staking.setKeyper(keyper2, true);
-
-        vm.startPrank(keyper2);
-        shu.mint(keyper2, 1_000_000 * 1e18);
-        shu.approve(address(staking), minStake);
-        staking.stake(minStake);
-        vm.stopPrank();
-
-        staking.harvest(keyper1);
-
-        vm.warp(block.timestamp + 500); // 500 seconds later
+        vm.warp(block.timestamp + 1000); // 1000 seconds later
 
         uint256 claimAmount = 1_000e18; // 1 SHU per second is distributed
 
@@ -149,6 +123,18 @@ contract StakingUnitTest is Test {
         emit IStaking.ClaimRewards(keyper1, address(shu), claimAmount);
 
         vm.prank(keyper1);
-        staking.claimReward(shu, 0);
+        staking.claimReward(shu, claimAmount);
+    }
+
+    function testKeyperUnstakeAllSucceed() public {
+        uint256 index = testStakeSucceed();
+
+        vm.warp(block.timestamp + 1000); // 1000 seconds later
+
+        vm.expectEmit(true, true, true, true, address(staking));
+        emit IStaking.Unstaked(keyper1, minStake, minStake);
+
+        vm.prank(keyper1);
+        staking.unstake(keyper1, index, 0);
     }
 }
