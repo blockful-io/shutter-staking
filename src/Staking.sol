@@ -124,7 +124,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         rewardsDistributor.distributeRewards();
 
         if (caller != address(0)) {
-            address[] rewardTokens = rewardsDistributor.rewardTokens();
+            address[] memory rewardTokens = rewardsDistributor.rewardTokens();
 
             for (uint256 i = 0; i < rewardTokens.length; i++) {
                 address token = rewardTokens[i];
@@ -150,15 +150,15 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
                             .userRewardPerTokenPaid = balanceOf(caller);
                     }
                 } else {
-                    uint256 rewardPerToken = rewardPerToken(token);
+                    uint256 _rewardPerToken = rewardPerToken(token);
 
                     keyperRewards[caller][token].earned += (balanceOf(caller) *
-                        (rewardPerToken -
+                        (_rewardPerToken -
                             keyperRewards[caller][token]
                                 .userRewardPerTokenPaid));
 
                     keyperRewards[caller][token]
-                        .userRewardPerTokenPaid = rewardPerToken;
+                        .userRewardPerTokenPaid = _rewardPerToken;
                 }
             }
         }

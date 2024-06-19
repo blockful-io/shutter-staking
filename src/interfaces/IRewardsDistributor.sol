@@ -12,6 +12,8 @@ interface IRewardsDistributor {
 
     function distributeRewards() external;
 
+    function rewardTokens() external view returns (address[] memory);
+
     function rewardConfigurations(
         address receiver,
         address token

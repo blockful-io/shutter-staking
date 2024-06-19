@@ -134,6 +134,8 @@ struct Stake {
 
 #### `unstake(uint256 amount, uint256 stakeId)`
 
+TODO improve description of lockPeriod
+
 -   The shares are burned when the keyper unstakes.
 -   The caller must have staked for at least `lockPeriod` for the specific stake.
 -   If amount is greater than the user balance, the contract will unstake the
