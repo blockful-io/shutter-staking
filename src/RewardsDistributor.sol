@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.25;
 
+import {console} from "@forge-std/console.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -41,11 +42,11 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
-    event RewardConfigurationSet(
-        address indexed receiver,
-        address indexed token,
-        uint256 emissionRate
-    );
+    //    event RewardConfigurationSet(
+    //        address indexed receiver,
+    //        address indexed token,
+    //        uint256 emissionRate
+    //    );
 
     event RewardDistributed(
         address indexed receiver,
@@ -89,7 +90,7 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
         );
 
         if (emissionRate == 0) {
-            // remove the token from the list
+            // remove the token
             address[] storage tokens = rewardTokens[receiver];
             for (uint256 i = 0; i < tokens.length; i++) {
                 if (tokens[i] == token) {
@@ -100,7 +101,7 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
             }
         }
 
-        emit RewardConfigurationSet(receiver, token, emissionRate);
+        //  emit RewardConfigurationSet(receiver, token, emissionRate);
     }
 
     /// @notice Distribute rewards to receiver
@@ -146,5 +147,11 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
         IERC20(token).safeTransfer(receiver, reward);
 
         emit RewardDistributed(receiver, token, reward);
+    }
+
+    function getRewardTokens(
+        address receiver
+    ) external view returns (address[] memory) {
+        return rewardTokens[receiver];
     }
 }

@@ -51,13 +51,14 @@ interface IStaking {
         address keyper
     ) external view returns (uint256);
 
+    function compound(address keyper) external;
+
     event Staked(
         address indexed user,
         uint256 indexed amount,
-        uint256 indexed shares,
         uint256 lockPeriod
     );
-    event Unstaked(address user, uint256 amount, uint256 shares);
+    event Unstaked(address user, uint256 amount);
     event ClaimRewards(address user, address rewardToken, uint256 rewards);
     event KeyperSet(address keyper, bool isKeyper);
 }

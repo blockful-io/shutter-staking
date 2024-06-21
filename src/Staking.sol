@@ -114,20 +114,43 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Distribute rewards
         rewardsDistributor.distributeRewards();
 
-        if (caller != address(0)) {
-            address[] memory rewardTokens = rewardsDistributor.rewardTokens();
+        address[] memory rewardTokens = rewardsDistributor.getRewardTokens(
+            address(this)
+        );
 
-            for (uint256 i = 0; i < rewardTokens.length; i++) {
-                address token = rewardTokens[i];
+        for (uint256 i = 0; i < rewardTokens.length; i++) {
+            address token = rewardTokens[i];
 
-                uint256 _rewardPerToken = rewardPerToken(token);
+            uint256 _rewardPerToken = rewardPerToken(token);
+            rewardPerTokenStored[token] = _rewardPerToken;
 
-                keyperRewards[caller][token].earned += (balanceOf(caller) *
+            console.log(
+                "after rewardPerTokenStored[token]",
+                rewardPerTokenStored[token]
+            );
+
+            if (caller != address(0)) {
+                console.log("caller balance before earn", balanceOf(caller));
+                uint256 earned = (balanceOf(caller) *
                     (_rewardPerToken -
-                        keyperRewards[caller][token].userRewardPerTokenPaid));
+                        keyperRewards[caller][token].userRewardPerTokenPaid)) /
+                    1e18;
 
+                console.log("earned", earned);
+
+                keyperRewards[caller][token].earned += earned;
                 keyperRewards[caller][token]
                     .userRewardPerTokenPaid = _rewardPerToken;
+
+                // compound
+                if (token == address(stakingToken)) {
+                    uint256 reward = keyperRewards[caller][token].earned;
+
+                    if (reward > 0) {
+                        keyperRewards[caller][token].earned = 0;
+                        _mint(caller, reward);
+                    }
+                }
             }
         }
 
@@ -354,6 +377,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
             require(maxWithdrawAmount > 0, "No rewards to claim");
 
+            console.log("maxWithdrawAmount", maxWithdrawAmount);
+
             // If the amount is greater than the max withdraw amount, the contract
             // will transfer the maximum amount available not the requested amount
             // If the amount is 0, claim all the rewards
@@ -378,6 +403,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         emit ClaimRewards(keyper, address(rewardToken), amount);
     }
+
+    function compound(address keyper) external updateRewards(keyper) {}
 
     /*//////////////////////////////////////////////////////////////
                          RESTRICTED FUNCTIONS
@@ -446,9 +473,13 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param keyper The keyper address
     /// @return The maximum amount of assets that a keyper can withdraw
     function maxWithdraw(address keyper) public view virtual returns (uint256) {
+        console.log("maxWithdraw: keyper balance", balanceOf(keyper));
+        console.log("maxWithdraw: total locked", totalLocked[keyper]);
+        console.log("maxWithdraw: min stake", minStake);
+
         return
             balanceOf(keyper) -
-            (totalLocked[keyper] >= minStake ? minStake : totalLocked[keyper]);
+            (totalLocked[keyper] >= minStake ? totalLocked[keyper] : minStake);
     }
 
     function maxWithdraw(
@@ -493,10 +524,15 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
             return rewardPerTokenStored[token];
         }
 
-        (, uint256 rewardRate) = rewardsDistributor.rewardConfigurations(
+        (uint256 rewardRate, ) = rewardsDistributor.rewardConfigurations(
             address(this),
             token
         );
+        console.log("reward rate", rewardRate);
+        console.log("rewardPerTokenStored[token]", rewardPerTokenStored[token]);
+        console.log("block.timestamp", block.timestamp);
+        console.log("updatedAt", updatedAt);
+        console.log("supply", supply / 1e18);
 
         return
             rewardPerTokenStored[token] +

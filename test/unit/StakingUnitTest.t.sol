@@ -17,7 +17,7 @@ contract StakingUnitTest is Test {
     MockShu public shu;
 
     uint256 constant lockPeriod = 60 * 24 * 30 * 6; // 6 months
-    uint256 constant minStake = 50_000 * 1e18; // 50k
+    uint256 constant minStake = 10_000 * 1e18; // 50k
 
     address keyper1 = address(0x1234);
     address keyper2 = address(0x5678);
@@ -69,50 +69,137 @@ contract StakingUnitTest is Test {
                                HAPPY PATHS
     //////////////////////////////////////////////////////////////*/
 
-    function testAddKeyper() public {
+    function testAddKeypers() public {
         vm.expectEmit(address(staking));
         emit IStaking.KeyperSet(keyper1, true);
         staking.setKeyper(keyper1, true);
+
+        emit IStaking.KeyperSet(keyper2, true);
+        staking.setKeyper(keyper2, true);
     }
 
     function testStakeSucceed() public returns (uint256 stakeIndex) {
-        testAddKeyper();
+        testAddKeypers();
+
+        uint256 contractBalanceBefore = shu.balanceOf(address(staking));
+        uint256 keyperBalanceBefore = shu.balanceOf(keyper1);
 
         vm.startPrank(keyper1);
         shu.approve(address(staking), minStake);
 
         vm.expectEmit(true, true, true, true, address(staking));
-        emit IStaking.Staked(
-            keyper1,
-            minStake,
-            minStake, // first stake, shares == amount
-            lockPeriod
-        );
+        emit IStaking.Staked(keyper1, minStake, lockPeriod);
 
         stakeIndex = staking.stake(minStake);
-
         vm.stopPrank();
+
+        uint256 contractBalanceAfter = shu.balanceOf(address(staking));
+        uint256 keyperBalanceAfter = shu.balanceOf(keyper1);
+
+        assertEq(
+            contractBalanceAfter - contractBalanceBefore,
+            minStake,
+            "Wrong contract balance"
+        );
+        assertEq(
+            keyperBalanceBefore - minStake,
+            keyperBalanceAfter,
+            "Wrong keyper balance"
+        );
     }
 
     function testMultipleKeyperStakeSucceed() public {
         testStakeSucceed();
-        vm.warp(block.timestamp + 1000); // 500 seconds later
 
-        staking.setKeyper(keyper2, true);
+        vm.warp(block.timestamp + 1000);
+
+        // TODO move assertions to modifier
+        uint256 contractBalanceBefore = shu.balanceOf(address(staking));
+        uint256 keyperBalanceBefore = shu.balanceOf(keyper2);
 
         vm.startPrank(keyper2);
-        shu.mint(keyper2, 1_000_000 * 1e18);
         shu.approve(address(staking), minStake);
+
         staking.stake(minStake);
         vm.stopPrank();
 
-        vm.warp(block.timestamp + 1000); // 500 seconds later
+        vm.warp(block.timestamp + 1000);
+
+        uint256 contractBalanceAfter = shu.balanceOf(address(staking));
+        uint256 keyperBalanceAfter = shu.balanceOf(keyper2);
+
+        assertEq(
+            contractBalanceAfter - contractBalanceBefore,
+            minStake,
+            "Wrong contract balance"
+        );
+        assertEq(
+            keyperBalanceBefore - minStake,
+            keyperBalanceAfter,
+            "Wrong keyper balance"
+        );
+    }
+
+    function testClaimAllRewardSucceed() public {
+        testStakeSucceed();
+
+        vm.warp(block.timestamp + 100_000);
+
+        uint256 contractBalanceBefore = shu.balanceOf(address(staking));
+        uint256 keyperBalanceBefore = shu.balanceOf(keyper1);
+
+        //vm.expectEmit(true, true, true, true, address(staking));
+        //emit IStaking.ClaimRewards(keyper1, address(shu), claimAmount);
 
         vm.prank(keyper1);
         staking.claimReward(shu, 0);
+
+        uint256 contractBalanceAfter = shu.balanceOf(address(staking));
+        uint256 keyperBalanceAfter = shu.balanceOf(keyper1);
+
+        assertEq(
+            contractBalanceAfter - contractBalanceBefore,
+            0,
+            "All rewards receive must be transferred"
+        );
+        assertEq(
+            contractBalanceAfter,
+            minStake,
+            "Contract balance after must be equal minStake"
+        );
     }
 
-    function testClaimRewardSucceed() public {
+    function testClaimAllRewardAfterCompoundSucceed() public {
+        testStakeSucceed();
+
+        uint256 contractBalanceBefore = shu.balanceOf(address(staking));
+        uint256 keyperBalanceBefore = shu.balanceOf(keyper1);
+
+        vm.warp(block.timestamp + 50_000);
+
+        staking.compound(keyper1);
+
+        vm.warp(block.timestamp + 50_000);
+
+        vm.prank(keyper1);
+        staking.claimReward(shu, 0);
+
+        uint256 contractBalanceAfter = shu.balanceOf(address(staking));
+        uint256 keyperBalanceAfter = shu.balanceOf(keyper1);
+
+        assertEq(
+            contractBalanceAfter - contractBalanceBefore,
+            0,
+            "All rewards receive must be transferred"
+        );
+        assertEq(
+            contractBalanceAfter,
+            minStake,
+            "Contract balance after must be equal minStake"
+        );
+    }
+
+    function testMultipleClaimRewardSucceed() public {
         testStakeSucceed();
 
         vm.warp(block.timestamp + 1000); // 1000 seconds later
@@ -132,7 +219,7 @@ contract StakingUnitTest is Test {
         vm.warp(block.timestamp + 1000); // 1000 seconds later
 
         vm.expectEmit(true, true, true, true, address(staking));
-        emit IStaking.Unstaked(keyper1, minStake, minStake);
+        emit IStaking.Unstaked(keyper1, minStake);
 
         vm.prank(keyper1);
         staking.unstake(keyper1, index, 0);
