@@ -6,7 +6,7 @@ import "@forge-std/Test.sol";
 import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
-import {StakingV2 as Staking} from "src/StakingV2.sol";
+import {Staking} from "src/Staking.sol";
 import {RewardsDistributor} from "src/RewardsDistributor.sol";
 import {IRewardsDistributor} from "src/interfaces/IRewardsDistributor.sol";
 import {MockGovToken} from "test/mocks/MockGovToken.sol";
@@ -65,7 +65,6 @@ contract StakingTest is Test {
 
         staking = Staking(staking);
 
-        console.log("block timestamp at set", block.timestamp);
         rewardsDistributor.setRewardConfiguration(
             address(staking),
             address(govToken),
@@ -290,7 +289,161 @@ contract Stake is StakingTest {
         );
     }
 
-    function testFuzz_Depositor1AndDepositor2ReceivesTheSameAmountOfSharesWhenStakingSameAmountInTheSameBlock()
-        public
-    {}
+    function testFuzz_Depositor1AndDepositor2ReceivesTheSameAmountOfSharesWhenStakingSameAmountInTheSameBlock(
+        address _depositor1,
+        address _depositor2,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor1, _amount);
+        _mintGovToken(_depositor2, _amount);
+
+        _setKeyper(_depositor1, true);
+        _setKeyper(_depositor2, true);
+
+        vm.assume(_depositor1 != address(0));
+        vm.assume(_depositor2 != address(0));
+
+        _stake(_depositor1, _amount);
+        _stake(_depositor2, _amount);
+
+        assertEq(
+            staking.balanceOf(_depositor1),
+            staking.balanceOf(_depositor2),
+            "Wrong balance"
+        );
+    }
+
+    function testFuzz_Depositor1ReceivesMoreShareWhenStakingBeforeDepositor2(
+        address _depositor1,
+        address _depositor2,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundRealisticTimeAhead(_jump);
+
+        _mintGovToken(_depositor1, _amount);
+        _mintGovToken(_depositor2, _amount);
+
+        _setKeyper(_depositor1, true);
+        _setKeyper(_depositor2, true);
+
+        vm.assume(_depositor1 != address(0));
+        vm.assume(_depositor2 != address(0));
+
+        _stake(_depositor1, _amount);
+
+        _jumpAhead(_jump);
+
+        _stake(_depositor2, _amount);
+
+        assertGt(
+            staking.balanceOf(_depositor1),
+            staking.balanceOf(_depositor2),
+            "Wrong balance"
+        );
+    }
+
+    function testFuzz_UpdateContractGovTokenBalanceWhenStaking(
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        vm.assume(_depositor != address(0));
+
+        uint256 _contractBalanceBefore = govToken.balanceOf(address(staking));
+
+        _stake(_depositor, _amount);
+
+        uint256 _contractBalanceAfter = govToken.balanceOf(address(staking));
+
+        assertEq(
+            _contractBalanceAfter - _contractBalanceBefore,
+            _amount,
+            "Wrong balance"
+        );
+    }
+
+    function testFuzz_trackAmountStakedWhenStaking(
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        vm.assume(_depositor != address(0));
+
+        uint256 depositIndex = _stake(_depositor, _amount);
+
+        (uint256 amount, , ) = staking.stakes(_depositor, depositIndex);
+
+        assertEq(amount, _amount, "Wrong amount");
+    }
+
+    function testFuzz_trackTimestampWhenStaking(
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        vm.assume(_depositor != address(0));
+
+        uint256 depositIndex = _stake(_depositor, _amount);
+
+        (, uint256 timestamp, ) = staking.stakes(_depositor, depositIndex);
+
+        assertEq(timestamp, block.timestamp, "Wrong timestamp");
+    }
+
+    function testFuzz_trackLockPeriodWhenStaking(
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        vm.assume(_depositor != address(0));
+
+        uint256 depositIndex = _stake(_depositor, _amount);
+
+        (, , uint256 lockPeriod) = staking.stakes(_depositor, depositIndex);
+
+        assertEq(lockPeriod, LOCK_PERIOD, "Wrong lock period");
+    }
+
+    function testFuzz_trackAmountStakedIndividuallyPerStake(
+        address _depositor,
+        uint256 _amount1,
+        uint256 _amount2
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+        _amount2 = _boundToRealisticStake(_amount2);
+
+        _mintGovToken(_depositor, _amount1 + _amount2);
+        _setKeyper(_depositor, true);
+
+        vm.assume(_depositor != address(0));
+
+        uint256 depositIndex1 = _stake(_depositor, _amount1);
+        uint256 depositIndex2 = _stake(_depositor, _amount2);
+
+        (uint256 amount1, , ) = staking.stakes(_depositor, depositIndex1);
+        (uint256 amount2, , ) = staking.stakes(_depositor, depositIndex2);
+
+        assertEq(amount1, _amount1, "Wrong amount");
+        assertEq(amount2, _amount2, "Wrong amount");
+    }
 }
