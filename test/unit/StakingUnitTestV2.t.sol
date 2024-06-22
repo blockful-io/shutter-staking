@@ -13,13 +13,11 @@ import {MockGovToken} from "../mocks/MockGovToken.sol";
 
 contract StakingUnitTest is Test {
     Staking public staking;
+    IRewardsDistributor public rewardsDistributor;
     MockGovToken public govToken;
 
     uint256 constant LOCK_PERIOD = 60 * 24 * 30 * 6; // 6 months
     uint256 constant MIN_STAKE = 50_000 * 1e18; // 50k
-
-    address keyper1 = address(0x1234);
-    address keyper2 = address(0x5678);
 
     function setUp() public {
         // Set the block timestamp to an arbitrary value to avoid introducing assumptions into tests
@@ -27,14 +25,19 @@ contract StakingUnitTest is Test {
         _jumpAhead(1234);
 
         govToken = new MockGovToken();
-        vm.label(govToken, "govToken");
+        vm.label(address(govToken), "govToken");
 
         // deploy rewards distributor
-        address rewardsDistributionProxy = address(
-            new TransparentUpgradeableProxy(
-                address(new RewardsDistributor()),
-                address(this),
-                abi.encodeWithSignature("initialize(address)", address(this))
+        rewardsDistributor = IRewardsDistributor(
+            address(
+                new TransparentUpgradeableProxy(
+                    address(new RewardsDistributor()),
+                    address(this),
+                    abi.encodeWithSignature(
+                        "initialize(address)",
+                        address(this)
+                    )
+                )
             )
         );
 
@@ -42,28 +45,30 @@ contract StakingUnitTest is Test {
         address stakingImpl = address(new Staking());
 
         staking = Staking(
-            new TransparentUpgradeableProxy(stakingImpl, address(this), "")
+            address(
+                new TransparentUpgradeableProxy(stakingImpl, address(this), "")
+            )
         );
-        vm.label(staking, "staking");
+        vm.label(address(staking), "staking");
 
         staking.initialize(
             address(this), // owner
             address(govToken),
-            address(rewardsDistributionProxy),
-            lockPeriod,
-            minStake
+            address(rewardsDistributor),
+            LOCK_PERIOD,
+            MIN_STAKE
         );
 
-        staking = Staking(stakingProxy);
+        staking = Staking(staking);
 
-        IRewardsDistributor(rewardsDistributionProxy).setRewardConfiguration(
-            stakingProxy,
-            address(shu),
+        rewardsDistributor.setRewardConfiguration(
+            address(staking),
+            address(govToken),
             1e18
         );
 
         // fund reward distribution
-        govToken.transfer(rewardsDistributionProxy, 1_000_000 * 1e18);
+        govToken.transfer(address(rewardsDistributor), 1_000_000 * 1e18);
     }
 
     function _jumpAhead(uint256 _seconds) public {
@@ -74,7 +79,7 @@ contract StakingUnitTest is Test {
         return uint96(bound(_amount, 0, 100_000_000e18));
     }
 
-    function _mintGovToken(address _to, uint96 _amount) internal {
+    function _mintGovToken(address _to, uint256 _amount) internal {
         vm.assume(_to != address(0));
         govToken.mint(_to, _amount);
     }
@@ -95,7 +100,7 @@ contract StakingUnitTest is Test {
 
         vm.startPrank(_keyper);
         govToken.approve(address(staking), _amount);
-        _depositId = uniStaker.stake(_amount, _delegatee, _beneficiary);
+        _depositId = staking.stake(_amount);
         vm.stopPrank();
     }
 
@@ -105,20 +110,20 @@ contract StakingUnitTest is Test {
 }
 
 contract Initializer is StakingUnitTest {
-    function test_Initialize() public {
+    function test_Initialize() public view {
         assertEq(staking.owner(), address(this), "Wrong owner");
         assertEq(
-            staking.stakingToken(),
+            address(staking.STAKING_TOKEN()),
             address(govToken),
             "Wrong staking token"
         );
         assertEq(
-            staking.rewardsDistributor(),
-            address(rewardsDistributionProxy),
+            address(staking.rewardsDistributor()),
+            address(rewardsDistributor),
             "Wrong rewards distributor"
         );
-        assertEq(staking.lockPeriod(), lockPeriod, "Wrong lock period");
-        assertEq(staking.minStake(), minStake, "Wrong min stake");
+        assertEq(staking.lockPeriod(), LOCK_PERIOD, "Wrong lock period");
+        assertEq(staking.minStake(), MIN_STAKE, "Wrong min stake");
     }
 }
 
@@ -142,20 +147,21 @@ contract Stake is StakingUnitTest {
         );
     }
 
-    function testFuz_EmitsAStakeEventWhenStaking(
+    function testFuzz_EmitsAStakeEventWhenStaking(
         address _depositor,
         uint256 _amount
-    ) {
+    ) public {
         _amount = _boundToRealisticStake(_amount);
 
         _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
 
         vm.assume(_depositor != address(0));
 
         vm.startPrank(_depositor);
         govToken.approve(address(staking), _amount);
         vm.expectEmit();
-        emit IStaking.Staked(keyper1, _amount, LOCK_PERIOD);
+        emit Staking.Staked(_depositor, _amount, LOCK_PERIOD);
 
         staking.stake(_amount);
         vm.stopPrank();
@@ -164,10 +170,11 @@ contract Stake is StakingUnitTest {
     function testFuzz_UpdatesTotalSupplyWhenStaking(
         address _depositor,
         uint256 _amount
-    ) {
+    ) public {
         _amount = _boundToRealisticStake(_amount);
 
         _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
 
         vm.assume(_depositor != address(0));
 
@@ -181,12 +188,15 @@ contract Stake is StakingUnitTest {
         address _depositor2,
         uint256 _amount1,
         uint256 _amount2
-    ) {
+    ) public {
         _amount1 = _boundToRealisticStake(_amount1);
         _amount2 = _boundToRealisticStake(_amount2);
 
         _mintGovToken(_depositor1, _amount1);
         _mintGovToken(_depositor2, _amount2);
+
+        _setKeyper(_depositor1, true);
+        _setKeyper(_depositor2, true);
 
         vm.assume(_depositor1 != address(0));
         vm.assume(_depositor2 != address(0));
@@ -198,6 +208,51 @@ contract Stake is StakingUnitTest {
             staking.totalSupply(),
             _amount1 + _amount2,
             "Wrong total supply"
+        );
+    }
+
+    function testFuzz_UpdateSharesWhenStaking(
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        vm.assume(_depositor != address(0));
+
+        uint256 _shares = staking.convertToShares(_amount);
+
+        _stake(_depositor, _amount);
+
+        assertEq(staking.balanceOf(_depositor), _shares, "Wrong balance");
+    }
+
+    function testFuzz_UpdateSharesWhenStakingTwice(
+        address _depositor,
+        uint256 _amount1,
+        uint256 _amount2
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+        _amount2 = _boundToRealisticStake(_amount2);
+
+        _mintGovToken(_depositor, _amount1 + _amount2);
+        _setKeyper(_depositor, true);
+
+        vm.assume(_depositor != address(0));
+
+        uint256 _shares1 = staking.convertToShares(_amount1);
+
+        _stake(_depositor, _amount1);
+
+        uint256 _shares2 = staking.convertToShares(_amount2);
+        _stake(_depositor, _amount2);
+
+        assertEq(
+            staking.balanceOf(_depositor),
+            _shares1 + _shares2,
+            "Wrong balance"
         );
     }
 }
