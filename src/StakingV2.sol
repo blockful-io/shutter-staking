@@ -7,7 +7,6 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
 import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
-import {SafeTransferLib} from "@solmate/utils/SafeTransferLib.sol";
 import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
@@ -78,6 +77,7 @@ contract StakingV2 is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     event Staked(
         address indexed user,
         uint256 indexed amount,
+        uint256 indexed shares,
         uint256 lockPeriod
     );
     event Unstaked(address user, uint256 amount, uint256 shares);
@@ -178,7 +178,7 @@ contract StakingV2 is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Record the new stake
         keyperStakes.push(Stake(amount, block.timestamp, lockPeriod));
 
-        emit Staked(keyper, amount, lockPeriod);
+        emit Staked(keyper, amount, sharesToMint, lockPeriod);
 
         return keyperStakes.length - 1;
     }
@@ -321,7 +321,7 @@ contract StakingV2 is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         }
 
         // Calculates the amount of shares to burn
-        uint256 shares = convertToShares(amount);
+        uint256 shares = convertToShares(rewards);
 
         // If the balance minus the shares is less than the locked in shares
         // the keyper can't claim below the total locked amount
@@ -333,9 +333,9 @@ contract StakingV2 is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         _burn(keyper, shares);
 
-        STAKING_TOKEN.safeTransfer(keyper, amount);
+        STAKING_TOKEN.safeTransfer(keyper, rewards);
 
-        emit ClaimRewards(keyper, amount);
+        emit ClaimRewards(keyper, rewards);
     }
 
     /*//////////////////////////////////////////////////////////////

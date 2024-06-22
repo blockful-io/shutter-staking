@@ -42,11 +42,11 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
-    //    event RewardConfigurationSet(
-    //        address indexed receiver,
-    //        address indexed token,
-    //        uint256 emissionRate
-    //    );
+    event RewardConfigurationSet(
+        address indexed receiver,
+        address indexed token,
+        uint256 emissionRate
+    );
 
     event RewardDistributed(
         address indexed receiver,
@@ -101,7 +101,7 @@ contract RewardsDistributor is Ownable2StepUpgradeable {
             }
         }
 
-        //  emit RewardConfigurationSet(receiver, token, emissionRate);
+        emit RewardConfigurationSet(receiver, token, emissionRate);
     }
 
     /// @notice Distribute rewards to receiver

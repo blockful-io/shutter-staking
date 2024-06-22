@@ -3,21 +3,24 @@ pragma solidity 0.8.25;
 
 import "@forge-std/Test.sol";
 
+import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 
-import {StakingV2 as Staking} from "../../src/StakingV2.sol";
-import {RewardsDistributor} from "../../src/RewardsDistributor.sol";
-import {IRewardsDistributor} from "../../src/interfaces/IRewardsDistributor.sol";
+import {StakingV2 as Staking} from "src/StakingV2.sol";
+import {RewardsDistributor} from "src/RewardsDistributor.sol";
+import {IRewardsDistributor} from "src/interfaces/IRewardsDistributor.sol";
+import {MockGovToken} from "test/mocks/MockGovToken.sol";
 
-import {MockGovToken} from "../mocks/MockGovToken.sol";
+contract StakingTest is Test {
+    using FixedPointMathLib for uint256;
 
-contract StakingUnitTest is Test {
     Staking public staking;
     IRewardsDistributor public rewardsDistributor;
     MockGovToken public govToken;
 
     uint256 constant LOCK_PERIOD = 60 * 24 * 30 * 6; // 6 months
     uint256 constant MIN_STAKE = 50_000 * 1e18; // 50k
+    uint256 constant REWARD_RATE = 1e18;
 
     function setUp() public {
         // Set the block timestamp to an arbitrary value to avoid introducing assumptions into tests
@@ -25,6 +28,7 @@ contract StakingUnitTest is Test {
         _jumpAhead(1234);
 
         govToken = new MockGovToken();
+        _mintGovToken(address(this), 100_000_000e18);
         vm.label(address(govToken), "govToken");
 
         // deploy rewards distributor
@@ -61,22 +65,29 @@ contract StakingUnitTest is Test {
 
         staking = Staking(staking);
 
+        console.log("block timestamp at set", block.timestamp);
         rewardsDistributor.setRewardConfiguration(
             address(staking),
             address(govToken),
-            1e18
+            REWARD_RATE
         );
 
         // fund reward distribution
-        govToken.transfer(address(rewardsDistributor), 1_000_000 * 1e18);
+        govToken.transfer(address(rewardsDistributor), 100_000_000e18);
     }
 
     function _jumpAhead(uint256 _seconds) public {
         vm.warp(block.timestamp + _seconds);
     }
 
-    function _boundMintAmount(uint96 _amount) internal pure returns (uint96) {
-        return uint96(bound(_amount, 0, 100_000_000e18));
+    function _boundMintAmount(uint96 _amount) internal pure returns (uint256) {
+        return bound(_amount, 0, 100_000_000e18);
+    }
+
+    function _boundRealisticTimeAhead(
+        uint256 _time
+    ) internal pure returns (uint256) {
+        return bound(_time, 1, 105 weeks); // two years
     }
 
     function _mintGovToken(address _to, uint256 _amount) internal {
@@ -107,9 +118,20 @@ contract StakingUnitTest is Test {
     function _setKeyper(address _keyper, bool _isKeyper) internal {
         staking.setKeyper(_keyper, _isKeyper);
     }
+
+    function _convertToSharesIncludeRewardsDistributed(
+        uint256 _amount,
+        uint256 _rewardsDistributed
+    ) internal view returns (uint256) {
+        uint256 supply = staking.totalSupply();
+
+        uint256 assets = staking.totalAssets() + _rewardsDistributed;
+
+        return supply == 0 ? _amount : _amount.mulDivDown(supply, assets);
+    }
 }
 
-contract Initializer is StakingUnitTest {
+contract Initializer is StakingTest {
     function test_Initialize() public view {
         assertEq(staking.owner(), address(this), "Wrong owner");
         assertEq(
@@ -127,7 +149,7 @@ contract Initializer is StakingUnitTest {
     }
 }
 
-contract Stake is StakingUnitTest {
+contract Stake is StakingTest {
     function testFuzz_TransferTokensWhenStaking(
         address _depositor,
         uint256 _amount
@@ -158,10 +180,12 @@ contract Stake is StakingUnitTest {
 
         vm.assume(_depositor != address(0));
 
+        uint256 shares = staking.convertToShares(_amount);
+
         vm.startPrank(_depositor);
         govToken.approve(address(staking), _amount);
         vm.expectEmit();
-        emit Staking.Staked(_depositor, _amount, LOCK_PERIOD);
+        emit Staking.Staked(_depositor, _amount, shares, LOCK_PERIOD);
 
         staking.stake(_amount);
         vm.stopPrank();
@@ -232,10 +256,13 @@ contract Stake is StakingUnitTest {
     function testFuzz_UpdateSharesWhenStakingTwice(
         address _depositor,
         uint256 _amount1,
-        uint256 _amount2
+        uint256 _amount2,
+        uint256 _jump
     ) public {
         _amount1 = _boundToRealisticStake(_amount1);
         _amount2 = _boundToRealisticStake(_amount2);
+
+        _jump = _boundRealisticTimeAhead(_jump);
 
         _mintGovToken(_depositor, _amount1 + _amount2);
         _setKeyper(_depositor, true);
@@ -244,9 +271,16 @@ contract Stake is StakingUnitTest {
 
         uint256 _shares1 = staking.convertToShares(_amount1);
 
+        uint256 timestampBefore = block.timestamp;
+
         _stake(_depositor, _amount1);
 
-        uint256 _shares2 = staking.convertToShares(_amount2);
+        _jumpAhead(_jump);
+        uint256 _shares2 = _convertToSharesIncludeRewardsDistributed(
+            _amount2,
+            REWARD_RATE * (block.timestamp - timestampBefore)
+        );
+
         _stake(_depositor, _amount2);
 
         assertEq(
@@ -255,4 +289,8 @@ contract Stake is StakingUnitTest {
             "Wrong balance"
         );
     }
+
+    function testFuzz_Depositor1AndDepositor2ReceivesTheSameAmountOfSharesWhenStakingSameAmountInTheSameBlock()
+        public
+    {}
 }
