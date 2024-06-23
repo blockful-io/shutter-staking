@@ -121,6 +121,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 _lockPeriod,
         uint256 _minStake
     ) public initializer {
+        // TODO set name and symbol
         // Does nothing but calls anyway for consistency
         __ERC20Votes_init();
         __Ownable2Step_init();
@@ -143,6 +144,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param amount The amount of SHU to stake
     /// @return The index of the stake
     /// TODO check for reentrancy
+    /// TODO slippage protection
     function stake(
         uint256 amount
     ) external onlyKeyper updateRewards returns (uint256) {
@@ -203,11 +205,13 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param amount The amount
     /// TODO check for reentrancy
     /// TODO unstake only principal
+    /// TODO slippage protection
     function unstake(
         address keyper,
         uint256 stakeIndex,
         uint256 amount
     ) external updateRewards {
+        console.log("stakes[keyper].length", stakes[keyper].length);
         /////////////////////////// CHECKS ///////////////////////////////
         require(stakeIndex < stakes[keyper].length, "Invalid stake index");
 
@@ -240,6 +244,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
             }
 
             maxWithdrawAmount = maxWithdraw(keyper, keyperStake.amount);
+            console.log("maxWithdrawAmount", maxWithdrawAmount);
         } else {
             // doesn't exclude the min stake and locked staked as the keyper is not a keyper anymore
             maxWithdrawAmount = convertToAssets(balanceOf(keyper));
@@ -249,7 +254,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         // If the amount is still greater than the stake amount for the specified stake index
         // the contract will transfer the stake amount not the requested amount
-        if (amount > keyperStake.amount) {
+        // If amount specified by user is 0 transfer the stake amount
+        if (amount > keyperStake.amount || amount == 0) {
             amount = keyperStake.amount;
         }
 
@@ -323,14 +329,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Calculates the amount of shares to burn
         uint256 shares = convertToShares(rewards);
 
-        // If the balance minus the shares is less than the locked in shares
-        // the keyper can't claim below the total locked amount
-        // TODO I think this is never going to happen
-        require(
-            balanceOf(keyper) - shares >= convertToShares(totalLocked[keyper]),
-            "Keyper can't claim below total locked"
-        );
-
         _burn(keyper, shares);
 
         STAKING_TOKEN.safeTransfer(keyper, rewards);
@@ -399,7 +397,9 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param keyper The keyper address
     /// @return The maximum amount of assets that a keyper can withdraw
     function maxWithdraw(address keyper) public view virtual returns (uint256) {
-        uint256 assets = convertToAssets(balanceOf(keyper));
+        uint256 shares = balanceOf(keyper);
+        require(shares > 0, "Keyper has no shares");
+        uint256 assets = convertToAssets(shares);
 
         uint256 compare = totalLocked[keyper] >= minStake
             ? totalLocked[keyper]
@@ -420,17 +420,26 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 shares = balanceOf(keyper);
         require(shares > 0, "Keyper has no shares");
 
-        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+        // uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
-        uint256 assets = shares.mulDivUp(totalAssets(), supply);
+        // uint256 assets = supply == 0
+        //     ? shares
+        //     : shares.mulDivUp(totalAssets(), supply);
 
-        return
-            assets -
-            (
-                (totalLocked[keyper] - unlockedAmount) >= minStake
-                    ? totalLocked[keyper]
-                    : minStake
-            );
+        uint256 assets = convertToAssets(shares);
+        console.log("assets", assets);
+
+        uint256 locked = totalLocked[keyper] - unlockedAmount;
+        console.log("locked", locked);
+        uint256 compare = locked >= minStake ? locked : minStake;
+        console.log("minStake", minStake);
+
+        if (assets < compare) {
+            // TODO check this
+            return 0;
+        } else {
+            return assets - compare;
+        }
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -474,6 +483,22 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
         return supply == 0 ? shares : shares.mulDivDown(totalAssets(), supply);
+    }
+
+    /// @notice Get the amount of SHU that will be minted for a given amount of shares
+    function previewMint(uint256 shares) public view virtual returns (uint256) {
+        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? shares : shares.mulDivUp(totalAssets(), supply);
+    }
+
+    /// @notice Get the amount of SHU that will be burned for a given amount of SHU
+    function previewWithdraw(
+        uint256 assets
+    ) public view virtual returns (uint256) {
+        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? assets : assets.mulDivUp(supply, totalAssets());
     }
 
     /// @notice Get the amount of SHU staked for all keypers

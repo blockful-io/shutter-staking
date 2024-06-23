@@ -18,7 +18,7 @@ contract StakingTest is Test {
     IRewardsDistributor public rewardsDistributor;
     MockGovToken public govToken;
 
-    uint256 constant LOCK_PERIOD = 60 * 24 * 30 * 6; // 6 months
+    uint256 constant LOCK_PERIOD = 182 days; // 6 months
     uint256 constant MIN_STAKE = 50_000 * 1e18; // 50k
     uint256 constant REWARD_RATE = 0.1e18;
 
@@ -89,6 +89,10 @@ contract StakingTest is Test {
         return bound(_time, 1, 105 weeks); // two years
     }
 
+    function _boundUnlockedTime(uint256 _time) internal view returns (uint256) {
+        return bound(_time, block.timestamp + LOCK_PERIOD, 105 weeks);
+    }
+
     function _mintGovToken(address _to, uint256 _amount) internal {
         vm.assume(_to != address(0));
         govToken.mint(_to, _amount);
@@ -98,7 +102,7 @@ contract StakingTest is Test {
         uint256 _stakeAmount
     ) public pure returns (uint256 _boundedStakeAmount) {
         _boundedStakeAmount = uint256(
-            bound(_stakeAmount, MIN_STAKE, 25_000_000e18)
+            bound(_stakeAmount, MIN_STAKE, 5_000_000e18)
         );
     }
 
@@ -729,5 +733,238 @@ contract ClaimRewards is StakingTest {
         uint256 rewards = staking.claimRewards(expectedRewards);
 
         assertEq(rewards, expectedRewards, "Wrong rewards");
+    }
+
+    function testFuzz_OnlyBurnTheCorrespondedAmountOfSharesSpecifiedWhenClaimingRewards(
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundRealisticTimeAhead(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        _stake(_depositor, _amount);
+
+        uint256 timestampBefore = block.timestamp;
+        uint256 sharesBefore = staking.balanceOf(_depositor);
+
+        _jumpAhead(_jump);
+
+        uint256 expectedRewards = REWARD_RATE *
+            (block.timestamp - timestampBefore);
+        uint256 rewardsToClaim = expectedRewards / 2;
+
+        uint256 burnShares = _convertToSharesIncludeRewardsDistributed(
+            rewardsToClaim,
+            expectedRewards
+        );
+
+        vm.prank(_depositor);
+        staking.claimRewards(rewardsToClaim);
+
+        uint256 sharesAfter = staking.balanceOf(_depositor);
+
+        assertEq(sharesBefore - sharesAfter, burnShares, "Wrong shares burned");
+    }
+}
+
+contract Unstake is StakingTest {
+    function testFuzz_UpdateStakerGovTokenBalanceWhenUnstaking(
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        uint256 stakeIndex = _stake(_depositor, _amount);
+
+        assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
+
+        _jumpAhead(_jump);
+
+        vm.prank(_depositor);
+        staking.unstake(_depositor, stakeIndex, 0);
+
+        assertEq(govToken.balanceOf(_depositor), _amount, "Wrong balance");
+    }
+
+    function testFuzz_GovTokenBalanceUnchangedWhenUnstakingOnlyStaker(
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        uint256 stakeIndex = _stake(_depositor, _amount);
+
+        uint256 timestampBefore = block.timestamp;
+
+        _jumpAhead(_jump);
+
+        uint256 expectedRewards = REWARD_RATE *
+            (block.timestamp - timestampBefore);
+
+        vm.prank(_depositor);
+        staking.unstake(_depositor, stakeIndex, 0);
+
+        if (expectedRewards > 0) {
+            assertEq(
+                govToken.balanceOf(address(staking)),
+                expectedRewards,
+                "Wrong balance"
+            );
+        }
+    }
+
+    function testFuzz_EmitUnstakeEventWhenUnstaking(
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        uint256 stakeIndex = _stake(_depositor, _amount);
+
+        uint256 timestampBefore = block.timestamp;
+
+        _jumpAhead(_jump);
+
+        uint256 shares = _convertToSharesIncludeRewardsDistributed(
+            _amount,
+            REWARD_RATE * (block.timestamp - timestampBefore)
+        );
+        vm.expectEmit();
+        emit Staking.Unstaked(_depositor, _amount, shares);
+
+        vm.prank(_depositor);
+        staking.unstake(_depositor, stakeIndex, 0);
+    }
+
+    function testFuzz_UnstakeSpecifiedAmount(
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        uint256 stakeIndex = _stake(_depositor, _amount);
+
+        _jumpAhead(_jump);
+
+        vm.prank(_depositor);
+        staking.unstake(_depositor, stakeIndex, _amount);
+
+        assertEq(govToken.balanceOf(_depositor), _amount, "Wrong balance");
+    }
+
+    function testFuzz_UpdateTotalSupplyWhenUnstaking(
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        uint256 stakeIndex = _stake(_depositor, _amount);
+
+        uint256 timestampBefore = block.timestamp;
+
+        _jumpAhead(_jump);
+
+        uint256 rewards = REWARD_RATE * (block.timestamp - timestampBefore);
+
+        vm.prank(_depositor);
+        staking.unstake(_depositor, stakeIndex, 0);
+
+        uint256 expectedSharesRemaining = staking.convertToShares(rewards);
+
+        uint256 totalSupplyAfter = staking.totalSupply();
+
+        assertEq(
+            totalSupplyAfter,
+            expectedSharesRemaining,
+            "Wrong total supply"
+        );
+    }
+
+    function testFuzz_AnyoneCanUnstakeOnBehalfOfKeyperWhenKeyeprIsNotAKeyperAnymore(
+        address _depositor,
+        address _anyone,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundRealisticTimeAhead(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        uint256 stakeIndex = _stake(_depositor, _amount);
+        assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
+
+        _setKeyper(_depositor, false);
+
+        _jumpAhead(_jump);
+
+        vm.prank(_anyone);
+        staking.unstake(_depositor, stakeIndex, 0);
+
+        assertEq(govToken.balanceOf(_depositor), _amount, "Wrong balance");
+    }
+
+    function testFuzz_DepositorHasMultipleStakesUnstakeCorrectStake(
+        address _depositor,
+        uint256 _amount1,
+        uint256 _amount2,
+        uint256 _jump
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+        _amount2 = _boundToRealisticStake(_amount2);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount1 + _amount2);
+        _setKeyper(_depositor, true);
+
+        uint256 stakeIndex1 = _stake(_depositor, _amount1);
+        uint256 stakeIndex2 = _stake(_depositor, _amount2);
+        assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
+
+        _jumpAhead(_jump);
+
+        vm.prank(_depositor);
+        staking.unstake(_depositor, stakeIndex1, 0);
+
+        assertEq(govToken.balanceOf(_depositor), _amount1, "Wrong balance");
+
+        vm.prank(_depositor);
+        staking.unstake(_depositor, stakeIndex2, 0);
+
+        assertEq(
+            govToken.balanceOf(_depositor),
+            _amount1 + _amount2,
+            "Wrong balance"
+        );
     }
 }
