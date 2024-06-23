@@ -120,7 +120,8 @@ contract StakingTest is Test {
                 uint160(_keyper) > 0x100 && // ignore precompiled address
                 _keyper != address(this) &&
                 _keyper != address(staking) &&
-                _keyper != ProxyUtils.getAdminAddress(address(staking))
+                _keyper != ProxyUtils.getAdminAddress(address(staking)) &&
+                _keyper != address(rewardsDistributor)
         );
 
         vm.startPrank(_keyper);

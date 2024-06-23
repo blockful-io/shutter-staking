@@ -440,19 +440,10 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 shares = balanceOf(keyper);
         require(shares > 0, "Keyper has no shares");
 
-        // uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        // uint256 assets = supply == 0
-        //     ? shares
-        //     : shares.mulDivUp(totalAssets(), supply);
-
         uint256 assets = convertToAssets(shares);
-        console.log("assets", assets);
 
         uint256 locked = totalLocked[keyper] - unlockedAmount;
-        console.log("locked", locked);
         uint256 compare = locked >= minStake ? locked : minStake;
-        console.log("minStake", minStake);
 
         if (assets < compare) {
             // TODO check this
@@ -505,30 +496,15 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         return supply == 0 ? shares : shares.mulDivDown(totalAssets(), supply);
     }
 
-    /// @notice Get the amount of SHU that will be minted for a given amount of shares
-    function previewMint(uint256 shares) public view virtual returns (uint256) {
-        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? shares : shares.mulDivUp(totalAssets(), supply);
-    }
-
-    /// @notice Get the amount of SHU that will be burned for a given amount of SHU
-    function previewWithdraw(
-        uint256 assets
-    ) public view virtual returns (uint256) {
-        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? assets : assets.mulDivUp(supply, totalAssets());
-    }
-
     /// @notice Get the amount of SHU staked for all keypers
     function totalAssets() public view virtual returns (uint256) {
         return STAKING_TOKEN.balanceOf(address(this));
     }
 
+    /// @notice Get the stake ids belonging to a keyper
     function getKeyperStakeIds(
         address keyper
-    ) public view returns (uint256[] memory) {
+    ) external view returns (uint256[] memory) {
         return keyperStakes[keyper].values();
     }
 }
