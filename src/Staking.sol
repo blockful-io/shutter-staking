@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.25;
+pragma solidity 0.8.26;
 
 import {console} from "@forge-std/console.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -62,7 +62,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     }
 
     /*//////////////////////////////////////////////////////////////
-                             MAPPINGS/ARRAYS
+                                MAPPINGS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice stores the metadata associated with a given stake
@@ -83,15 +83,57 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Emitted when a keyper stakes SHU
     event Staked(
         address indexed user,
         uint256 indexed amount,
         uint256 indexed shares,
         uint256 lockPeriod
     );
+
+    /// @notice Emitted when a keyper unstakes SHU
     event Unstaked(address user, uint256 amount, uint256 shares);
+
+    /// @notice Emitted when a keyper claims rewards
     event RewardsClaimed(address user, uint256 rewards);
+
+    /// @notice Emitted when a keyper is added or removed
     event KeyperSet(address keyper, bool isKeyper);
+
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Thrown when a non-keyper attempts a call for which only keypers are allowed
+    error OnlyKeyper();
+
+    /// @notice  Thrown when transfer/tranferFrom is called
+    error TransferDisabled();
+
+    /// @notice Thrown when a keyper has no shares
+    error KeyperHasNoShares();
+
+    /// @notice Thrown when a keyper has staking for the first time and the
+    /// amount is less than the minimum stake set by the DAO
+    error FirstStakeLessThanMinStake();
+
+    /// @notice Thrown when someone try to unstake a stake that doesn't belong
+    /// to the keyper in question
+    error StakeDoesNotBelongToKeyper();
+
+    /// @notice Thrown when someone try to unstake a stake that doesn't exist
+    error StakeDoesNotExist();
+
+    /// @notice Thrown when someone try to unstake a amount that is greater than
+    /// the stake amount belonging to the stake id
+    error WithdrawAmountTooHigh();
+
+    /// @notice Thrown when someone try to unstake a stake that is still locked
+    error StakeIsStillLocked();
+
+    /// @notice Thrown when a keyper try to claim rewards but has no rewards to
+    /// claim
+    error NoRewardsToClaim();
 
     /*//////////////////////////////////////////////////////////////
                                  MODIFIERS
@@ -99,7 +141,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
     /// @notice Ensure only keypers can stake
     modifier onlyKeyper() {
-        require(keypers[msg.sender], "Only keyper");
+        require(keypers[msg.sender], OnlyKeyper());
         _;
     }
 
@@ -165,10 +207,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         // If the keyper has no stakes, the first stake must be at least the minimum stake
         if (stakesIds.length() == 0) {
-            require(
-                amount >= minStake,
-                "The first stake must be at least the minimum stake"
-            );
+            require(amount >= minStake, FirstStakeLessThanMinStake());
         }
 
         /////////////////////////// EFFECTS ///////////////////////////////
@@ -231,28 +270,32 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         /////////////////////////// CHECKS ///////////////////////////////
         require(
             keyperStakes[keyper].contains(stakeId),
-            "Stake does not belong to keyper"
+            StakeDoesNotBelongToKeyper()
         );
+        Stake memory keyperStake = stakes[stakeId];
 
-        require(stakes[stakeId].amount > 0, "Stake does not exist");
+        require(keyperStake.amount > 0, StakeDoesNotExist());
 
-        // Gets the  stake
-        Stake storage keyperStake = stakes[stakeId];
-
-        uint256 maxWithdrawAmount;
+        // If caller doesn't specify the amount, the contract will transfer the
+        // stake amount for the stakeId
+        if (amount == 0) {
+            amount = keyperStake.amount;
+        } else {
+            require(amount <= keyperStake.amount, WithdrawAmountTooHigh());
+        }
 
         // Checks below only apply if keyper is still a keyper
         // if keyper is not a keyper anymore, anyone can unstake, lock period is
         // ignored and minStake is not enforced
         if (keypers[keyper]) {
-            require(msg.sender == keyper, "Only keyper can unstake");
+            require(msg.sender == keyper, OnlyKeyper());
 
             // If the lock period is less than the global lock period, the stake
             // must be locked for the lock period
             if (lockPeriod < keyperStake.lockPeriod) {
                 require(
                     keyperStake.timestamp + lockPeriod <= block.timestamp,
-                    "Stake is still locked"
+                    StakeIsStillLocked()
                 );
             } else {
                 // If the global lock period is greater than the stake lock period,
@@ -260,33 +303,24 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
                 require(
                     keyperStake.timestamp + keyperStake.lockPeriod <=
                         block.timestamp,
-                    "Stake is still locked"
+                    StakeIsStillLocked()
                 );
             }
 
-            maxWithdrawAmount = maxWithdraw(keyper, keyperStake.amount);
+            require(
+                maxWithdraw(keyper, keyperStake.amount) >= amount,
+                WithdrawAmountTooHigh()
+            );
         } else {
-            // doesn't exclude the min stake and locked staked as the keyper is not a keyper anymore
-            maxWithdrawAmount = convertToAssets(balanceOf(keyper));
-        }
-
-        require(maxWithdrawAmount > 0, "Keyper has no stake");
-
-        // If the amount is still greater than the stake amount for the specified stake index
-        // the contract will transfer the stake amount not the requested amount
-        // If amount specified by user is 0 transfer the stake amount
-        if (amount > keyperStake.amount || amount == 0) {
-            amount = keyperStake.amount;
-        }
-
-        // If the amount is greater than the max withdraw amount, the contract
-        // will transfer the maximum amount available not the requested amount
-        // TODO I think this is never going to happen
-        if (amount > maxWithdrawAmount) {
-            amount = maxWithdrawAmount;
+            // doesn't include the min stake and locked staked as the keyper is not a keyper anymore
+            require(
+                convertToAssets(balanceOf(keyper)) >= amount,
+                WithdrawAmountTooHigh()
+            );
         }
 
         /////////////////////////// EFFECTS ///////////////////////////////
+
         // Calculates the amounf of shares to burn
         uint256 shares = convertToShares(amount);
 
@@ -294,13 +328,13 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         _burn(keyper, shares);
 
         // Decrease the amount from the stake
-        keyperStake.amount -= amount;
+        stakes[stakeId].amount -= amount;
 
         // Decrease the amount from the total locked
         totalLocked[keyper] -= amount;
 
         // If the stake is empty, remove it
-        if (keyperStake.amount == 0) {
+        if (stakes[stakeId].amount == 0) {
             // Remove the stake from the stakes mapping
             delete stakes[stakeId];
 
@@ -329,7 +363,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param amount The amount of rewards to claim
     function claimRewards(
         uint256 amount
-    ) external onlyKeyper updateRewards returns (uint256 rewards) {
+    ) external updateRewards returns (uint256 rewards) {
         address keyper = msg.sender;
 
         // Prevents the keyper from claiming more than they should
@@ -418,7 +452,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @return The maximum amount of assets that a keyper can withdraw
     function maxWithdraw(address keyper) public view virtual returns (uint256) {
         uint256 shares = balanceOf(keyper);
-        require(shares > 0, "Keyper has no shares");
+        require(shares > 0, KeyperHasNoShares());
+
         uint256 assets = convertToAssets(shares);
 
         uint256 compare = totalLocked[keyper] >= minStake
@@ -438,7 +473,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 unlockedAmount
     ) public view virtual returns (uint256) {
         uint256 shares = balanceOf(keyper);
-        require(shares > 0, "Keyper has no shares");
+        require(shares > 0, KeyperHasNoShares());
 
         uint256 assets = convertToAssets(shares);
 
@@ -459,7 +494,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
     /// @notice Transfer is disabled
     function transfer(address, uint256) public pure override returns (bool) {
-        revert("Transfer is disabled");
+        revert TransferDisabled();
     }
 
     /// @notice Transfer is disabled
@@ -468,7 +503,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         address,
         uint256
     ) public pure override returns (bool) {
-        revert("Transfer is disabled");
+        revert TransferDisabled();
     }
 
     /*//////////////////////////////////////////////////////////////
