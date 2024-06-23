@@ -5,11 +5,11 @@ import "@forge-std/Test.sol";
 
 import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
-
 import {Staking} from "src/Staking.sol";
 import {RewardsDistributor} from "src/RewardsDistributor.sol";
 import {IRewardsDistributor} from "src/interfaces/IRewardsDistributor.sol";
 import {MockGovToken} from "test/mocks/MockGovToken.sol";
+import {ProxyUtils} from "test/helper/ProxyUtils.sol";
 
 contract StakingTest is Test {
     using FixedPointMathLib for uint256;
@@ -106,7 +106,13 @@ contract StakingTest is Test {
         address _keyper,
         uint256 _amount
     ) internal returns (uint256 _depositId) {
-        vm.assume(_keyper != address(0));
+        vm.assume(
+            _keyper != address(0) &&
+                uint160(_keyper) > 0x100 && // ignore precompiled address
+                _keyper != address(this) &&
+                _keyper != address(staking) &&
+                _keyper != ProxyUtils.getAdminAddress(_keyper)
+        );
 
         vm.startPrank(_keyper);
         govToken.approve(address(staking), _amount);
@@ -159,7 +165,6 @@ contract Stake is StakingTest {
         _setKeyper(_depositor, true);
 
         _stake(_depositor, _amount);
-
         assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
         assertEq(
             govToken.balanceOf(address(staking)),
@@ -355,8 +360,6 @@ contract Stake is StakingTest {
         _mintGovToken(_depositor, _amount);
         _setKeyper(_depositor, true);
 
-        vm.assume(_depositor != address(0));
-
         uint256 _contractBalanceBefore = govToken.balanceOf(address(staking));
 
         _stake(_depositor, _amount);
@@ -435,7 +438,7 @@ contract Stake is StakingTest {
         _mintGovToken(_depositor, _amount1 + _amount2);
         _setKeyper(_depositor, true);
 
-        vm.assume(_depositor != address(0));
+        vm.assume(_depositor != address(0) && _depositor != address(this));
 
         uint256 depositIndex1 = _stake(_depositor, _amount1);
         uint256 depositIndex2 = _stake(_depositor, _amount2);

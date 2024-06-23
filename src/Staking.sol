@@ -13,7 +13,7 @@ import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 // TODO should be pausable?
 // TODO is this vulnerable to first deposit attack?
 // TODO check calculations
-contract StakingV2 is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
+contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
