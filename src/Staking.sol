@@ -5,6 +5,7 @@ import {console} from "@forge-std/console.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
 import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
 import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
@@ -19,6 +20,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     //////////////////////////////////////////////////////////////*/
     using SafeERC20 for IERC20;
     using FixedPointMathLib for uint256;
+    using EnumerableSet for EnumerableSet.UintSet;
 
     /*//////////////////////////////////////////////////////////////
                                IMMUTABLES
@@ -44,6 +46,9 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @dev only owner can change
     uint256 public minStake;
 
+    /// @notice Unique identifier that will be used for the next stake.
+    uint256 private nextStakeId;
+
     /*//////////////////////////////////////////////////////////////
                                  STRUCTS
     //////////////////////////////////////////////////////////////*/
@@ -60,11 +65,15 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
                              MAPPINGS/ARRAYS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice the keyper stakes mapping
-    mapping(address keyper => Stake[]) public stakes;
+    /// @notice stores the metadata associated with a given stake
+    mapping(uint256 id => Stake) public stakes;
+
+    // @notice stake ids belonging to a keyper
+    mapping(address keyper => EnumerableSet.UintSet stakeIds)
+        private keyperStakes;
 
     /// TODO when remove keyper also unstake the first stake
-    /// @notice the keypers mapping
+    /// @notice keypers mapping
     mapping(address keyper => bool isKeyper) public keypers;
 
     /// @notice how many SHU a keyper has locked
@@ -152,10 +161,10 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         address keyper = msg.sender;
 
         // Get the keyper stakes
-        Stake[] storage keyperStakes = stakes[keyper];
+        EnumerableSet.UintSet storage stakesIds = keyperStakes[keyper];
 
         // If the keyper has no stakes, the first stake must be at least the minimum stake
-        if (keyperStakes.length == 0) {
+        if (stakesIds.length() == 0) {
             require(
                 amount >= minStake,
                 "The first stake must be at least the minimum stake"
@@ -177,12 +186,20 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Lock the SHU in the contract
         STAKING_TOKEN.safeTransferFrom(keyper, address(this), amount);
 
-        // Record the new stake
-        keyperStakes.push(Stake(amount, block.timestamp, lockPeriod));
+        // Get next stake id and increment it
+        uint256 stakeId = nextStakeId++;
+
+        stakes[stakeId] = Stake({
+            amount: amount,
+            timestamp: block.timestamp,
+            lockPeriod: lockPeriod
+        });
+
+        stakesIds.add(stakeId);
 
         emit Staked(keyper, amount, sharesToMint, lockPeriod);
 
-        return keyperStakes.length - 1;
+        return stakeId;
     }
 
     /// @notice Unstake SHU
@@ -201,22 +218,26 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     ///            stake index, the contract will transfer the maximum amount available
     ///          - amount must be specified in SHU, not shares
     /// @param keyper The keyper address
-    /// @param stakeIndex The index of the stake to unstake
+    /// @param stakeId The stake index
     /// @param amount The amount
     /// TODO check for reentrancy
     /// TODO unstake only principal
     /// TODO slippage protection
     function unstake(
         address keyper,
-        uint256 stakeIndex,
+        uint256 stakeId,
         uint256 amount
     ) external updateRewards {
-        console.log("stakes[keyper].length", stakes[keyper].length);
         /////////////////////////// CHECKS ///////////////////////////////
-        require(stakeIndex < stakes[keyper].length, "Invalid stake index");
+        require(
+            keyperStakes[keyper].contains(stakeId),
+            "Stake does not belong to keyper"
+        );
 
-        // Gets the keyper stake
-        Stake storage keyperStake = stakes[keyper][stakeIndex];
+        require(stakes[stakeId].amount > 0, "Stake does not exist");
+
+        // Gets the  stake
+        Stake storage keyperStake = stakes[stakeId];
 
         uint256 maxWithdrawAmount;
 
@@ -244,7 +265,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
             }
 
             maxWithdrawAmount = maxWithdraw(keyper, keyperStake.amount);
-            console.log("maxWithdrawAmount", maxWithdrawAmount);
         } else {
             // doesn't exclude the min stake and locked staked as the keyper is not a keyper anymore
             maxWithdrawAmount = convertToAssets(balanceOf(keyper));
@@ -281,11 +301,11 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         // If the stake is empty, remove it
         if (keyperStake.amount == 0) {
-            // Remove the stake from the keyper's stake array
-            stakes[keyper][stakeIndex] = stakes[keyper][
-                stakes[keyper].length - 1
-            ];
-            stakes[keyper].pop();
+            // Remove the stake from the stakes mapping
+            delete stakes[stakeId];
+
+            // Remove the stake from the keyper stakes
+            keyperStakes[keyper].remove(stakeId);
         }
 
         /////////////////////////// INTERACTIONS ///////////////////////////
@@ -504,5 +524,11 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @notice Get the amount of SHU staked for all keypers
     function totalAssets() public view virtual returns (uint256) {
         return STAKING_TOKEN.balanceOf(address(this));
+    }
+
+    function getKeyperStakeIds(
+        address keyper
+    ) public view returns (uint256[] memory) {
+        return keyperStakes[keyper].values();
     }
 }

@@ -94,7 +94,12 @@ contract StakingTest is Test {
     }
 
     function _mintGovToken(address _to, uint256 _amount) internal {
-        vm.assume(_to != address(0));
+        vm.assume(
+            _to != address(0) &&
+                _to != address(staking) &&
+                _to != ProxyUtils.getAdminAddress(address(staking))
+        );
+
         govToken.mint(_to, _amount);
     }
 
@@ -109,7 +114,7 @@ contract StakingTest is Test {
     function _stake(
         address _keyper,
         uint256 _amount
-    ) internal returns (uint256 _depositId) {
+    ) internal returns (uint256 _stakeId) {
         vm.assume(
             _keyper != address(0) &&
                 uint160(_keyper) > 0x100 && // ignore precompiled address
@@ -120,7 +125,7 @@ contract StakingTest is Test {
 
         vm.startPrank(_keyper);
         govToken.approve(address(staking), _amount);
-        _depositId = staking.stake(_amount);
+        _stakeId = staking.stake(_amount);
         vm.stopPrank();
     }
 
@@ -385,9 +390,9 @@ contract Stake is StakingTest {
 
         vm.assume(_depositor != address(0));
 
-        uint256 depositIndex = _stake(_depositor, _amount);
+        uint256 stakeId = _stake(_depositor, _amount);
 
-        (uint256 amount, , ) = staking.stakes(_depositor, depositIndex);
+        (uint256 amount, , ) = staking.stakes(stakeId);
 
         assertEq(amount, _amount, "Wrong amount");
     }
@@ -403,9 +408,9 @@ contract Stake is StakingTest {
 
         vm.assume(_depositor != address(0));
 
-        uint256 depositIndex = _stake(_depositor, _amount);
+        uint256 stakeId = _stake(_depositor, _amount);
 
-        (, uint256 timestamp, ) = staking.stakes(_depositor, depositIndex);
+        (, uint256 timestamp, ) = staking.stakes(stakeId);
 
         assertEq(timestamp, block.timestamp, "Wrong timestamp");
     }
@@ -421,9 +426,9 @@ contract Stake is StakingTest {
 
         vm.assume(_depositor != address(0));
 
-        uint256 depositIndex = _stake(_depositor, _amount);
+        uint256 stakeId = _stake(_depositor, _amount);
 
-        (, , uint256 lockPeriod) = staking.stakes(_depositor, depositIndex);
+        (, , uint256 lockPeriod) = staking.stakes(stakeId);
 
         assertEq(lockPeriod, LOCK_PERIOD, "Wrong lock period");
     }
@@ -441,20 +446,14 @@ contract Stake is StakingTest {
 
         vm.assume(_depositor != address(0) && _depositor != address(this));
 
-        uint256 depositIndex1 = _stake(_depositor, _amount1);
+        uint256 stakeId1 = _stake(_depositor, _amount1);
 
-        (uint256 amount1, uint256 timestamp, ) = staking.stakes(
-            _depositor,
-            depositIndex1
-        );
+        (uint256 amount1, uint256 timestamp, ) = staking.stakes(stakeId1);
 
         _jumpAhead(1);
 
-        uint256 depositIndex2 = _stake(_depositor, _amount2);
-        (uint256 amount2, uint256 timestamp2, ) = staking.stakes(
-            _depositor,
-            depositIndex2
-        );
+        uint256 stakeId2 = _stake(_depositor, _amount2);
+        (uint256 amount2, uint256 timestamp2, ) = staking.stakes(stakeId2);
 
         assertEq(amount1, _amount1, "Wrong amount");
         assertEq(amount2, _amount2, "Wrong amount");
@@ -909,7 +908,7 @@ contract Unstake is StakingTest {
         );
     }
 
-    function testFuzz_AnyoneCanUnstakeOnBehalfOfKeyperWhenKeyeprIsNotAKeyperAnymore(
+    function testFuzz_AnyoneCanUnstakeOnBehalfOfKeyperWhenKeyperIsNotAKeyperAnymore(
         address _depositor,
         address _anyone,
         uint256 _amount,
