@@ -81,7 +81,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 lockPeriod
     );
     event Unstaked(address user, uint256 amount, uint256 shares);
-    event ClaimRewards(address user, uint256 rewards);
+    event RewardsClaimed(address user, uint256 rewards);
     event KeyperSet(address keyper, bool isKeyper);
 
     /*//////////////////////////////////////////////////////////////
@@ -90,7 +90,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
     /// @notice Ensure only keypers can stake
     modifier onlyKeyper() {
-        require(keypers[msg.sender], "Only keypers can stake");
+        require(keypers[msg.sender], "Only keyper");
         _;
     }
 
@@ -301,7 +301,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     ///           lock period for the principal must be respected
     ///
     /// @param amount The amount of rewards to claim
-    function claimReward(
+    function claimRewards(
         uint256 amount
     ) external onlyKeyper updateRewards returns (uint256 rewards) {
         address keyper = msg.sender;
@@ -309,16 +309,16 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Prevents the keyper from claiming more than they should
         uint256 maxWithdrawAmount = maxWithdraw(keyper);
 
-        require(maxWithdrawAmount > 0, "No rewards to claim");
-
         // If the amount is greater than the max withdraw amount, the contract
         // will transfer the maximum amount available not the requested amount
         // If the amount is 0, claim all the rewards
-        if (maxWithdrawAmount < amount || amount == 0) {
+        if (maxWithdrawAmount <= amount || amount == 0) {
             rewards = maxWithdrawAmount;
         } else {
             rewards = amount;
         }
+
+        require(rewards > 0, "No rewards to claim");
 
         // Calculates the amount of shares to burn
         uint256 shares = convertToShares(rewards);
@@ -335,7 +335,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         STAKING_TOKEN.safeTransfer(keyper, rewards);
 
-        emit ClaimRewards(keyper, rewards);
+        emit RewardsClaimed(keyper, rewards);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -399,17 +399,33 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param keyper The keyper address
     /// @return The maximum amount of assets that a keyper can withdraw
     function maxWithdraw(address keyper) public view virtual returns (uint256) {
-        return
-            convertToAssets(balanceOf(keyper)) -
-            (totalLocked[keyper] >= minStake ? totalLocked[keyper] : minStake);
+        uint256 assets = convertToAssets(balanceOf(keyper));
+
+        uint256 compare = totalLocked[keyper] >= minStake
+            ? totalLocked[keyper]
+            : minStake;
+
+        if (assets < compare) {
+            // TODO check this
+            return 0;
+        } else {
+            return assets - compare;
+        }
     }
 
     function maxWithdraw(
         address keyper,
         uint256 unlockedAmount
     ) public view virtual returns (uint256) {
+        uint256 shares = balanceOf(keyper);
+        require(shares > 0, "Keyper has no shares");
+
+        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        uint256 assets = shares.mulDivUp(totalAssets(), supply);
+
         return
-            convertToAssets(balanceOf(keyper)) -
+            assets -
             (
                 (totalLocked[keyper] - unlockedAmount) >= minStake
                     ? totalLocked[keyper]
