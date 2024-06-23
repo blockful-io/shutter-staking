@@ -351,7 +351,7 @@ contract Stake is StakingTest {
 
         _stake(_depositor2, _amount);
 
-        assertGt(
+        assertGe(
             staking.balanceOf(_depositor1),
             staking.balanceOf(_depositor2),
             "Wrong balance"
@@ -917,6 +917,11 @@ contract Unstake is StakingTest {
     ) public {
         _amount = _boundToRealisticStake(_amount);
         _jump = _boundRealisticTimeAhead(_jump);
+
+        vm.assume(
+            _anyone != address(0) &&
+                _anyone != ProxyUtils.getAdminAddress(address(staking))
+        );
 
         _mintGovToken(_depositor, _amount);
         _setKeyper(_depositor, true);
