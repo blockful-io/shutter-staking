@@ -1073,4 +1073,38 @@ contract Unstake is StakingTest {
         vm.expectRevert(Staking.StakeDoesNotBelongToKeyper.selector);
         staking.unstake(_depositor2, stakeId, 0);
     }
+
+    function testFuzz_RevertIf_AmountGreaterThanStakeAmount(
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        uint256 stakeIndex = _stake(_depositor, _amount);
+
+        vm.prank(_depositor);
+        vm.expectRevert(Staking.WithdrawAmountTooHigh.selector);
+        staking.unstake(_depositor, stakeIndex, _amount + 1);
+    }
+
+    function testFuzz_RevertIf_NonKeyperTryToUnstake(
+        address _depositor,
+        address _anyone,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+
+        _setKeyper(_depositor, true);
+
+        uint256 stakeId = _stake(_depositor, _amount);
+
+        vm.prank(_anyone);
+        vm.expectRevert(Staking.OnlyKeyper.selector);
+        staking.unstake(_depositor, stakeId, 0);
+    }
 }
