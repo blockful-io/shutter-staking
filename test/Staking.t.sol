@@ -719,6 +719,8 @@ contract ClaimRewards is StakingTest {
         _jump1 = _boundRealisticTimeAhead(_jump1);
         _jump2 = _boundRealisticTimeAhead(_jump2);
 
+        vm.assume(_depositor1 != _depositor2);
+
         _mintGovToken(_depositor1, _amount);
         _mintGovToken(_depositor2, _amount);
 
