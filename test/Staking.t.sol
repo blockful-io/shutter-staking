@@ -463,7 +463,67 @@ contract Stake is StakingTest {
         assertEq(timestamp2, block.timestamp, "Wrong timestamp");
     }
 
-    function testFuzz_increaseDepositorTotalLockedWhenStaking() public {}
+    function testFuzz_increaseTotalLockedWhenStaking(
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        vm.assume(_depositor != address(0));
+
+        uint256 totalLockedBefore = staking.totalLocked(_depositor);
+
+        _stake(_depositor, _amount);
+
+        uint256 totalLockedAfter = staking.totalLocked(_depositor);
+
+        assertEq(
+            totalLockedAfter - totalLockedBefore,
+            _amount,
+            "Wrong total locked"
+        );
+    }
+
+    function testFuzz_RevertIf_StakingLessThanMinStake(
+        address _depositor
+    ) public {
+        uint256 amount = MIN_STAKE - 1;
+
+        _mintGovToken(_depositor, amount);
+        _setKeyper(_depositor, true);
+
+        vm.assume(_depositor != address(0));
+
+        vm.startPrank(_depositor);
+        govToken.approve(address(staking), amount);
+
+        vm.expectRevert(Staking.FirstStakeLessThanMinStake.selector);
+        staking.stake(amount);
+
+        vm.stopPrank();
+    }
+
+    function testFuzz_RevertIf_DepositorIsNotAKeyper(
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+
+        vm.assume(_depositor != address(0));
+
+        vm.startPrank(_depositor);
+        govToken.approve(address(staking), _amount);
+
+        vm.expectRevert(Staking.OnlyKeyper.selector);
+        staking.stake(_amount);
+
+        vm.stopPrank();
+    }
 }
 
 contract ClaimRewards is StakingTest {
@@ -769,6 +829,29 @@ contract ClaimRewards is StakingTest {
 
         assertEq(sharesBefore - sharesAfter, burnShares, "Wrong shares burned");
     }
+
+    function testFuzz_RevertIf_NoRewardsToClaim(
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        _stake(_depositor, _amount);
+
+        vm.prank(_depositor);
+
+        vm.expectRevert(Staking.NoRewardsToClaim.selector);
+        staking.claimRewards(0);
+    }
+
+    function testFuzz_RevertIf_KeyperHasNoSHares(address _depositor) public {
+        vm.prank(_depositor);
+        vm.expectRevert(Staking.KeyperHasNoShares.selector);
+        staking.claimRewards(0);
+    }
 }
 
 contract Unstake is StakingTest {
@@ -971,5 +1054,23 @@ contract Unstake is StakingTest {
             _amount1 + _amount2,
             "Wrong balance"
         );
+    }
+
+    function testFuzz_RevertIf_StakeDoesNotBelongToKeyper(
+        address _depositor1,
+        address _depositor2,
+        uint256 _amount1
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+
+        _mintGovToken(_depositor1, _amount1);
+
+        _setKeyper(_depositor1, true);
+
+        uint256 stakeId = _stake(_depositor1, _amount1);
+
+        vm.prank(_depositor2);
+        vm.expectRevert(Staking.StakeDoesNotBelongToKeyper.selector);
+        staking.unstake(_depositor2, stakeId, 0);
     }
 }

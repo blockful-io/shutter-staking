@@ -378,7 +378,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
             rewards = amount;
         }
 
-        require(rewards > 0, "No rewards to claim");
+        require(rewards > 0, NoRewardsToClaim());
 
         // Calculates the amount of shares to burn
         uint256 shares = convertToShares(rewards);
