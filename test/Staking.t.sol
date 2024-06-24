@@ -1072,6 +1072,14 @@ contract Unstake is StakingTest {
         uint256 _amount1
     ) public {
         vm.assume(_depositor1 != _depositor2);
+        vm.assume(
+            _depositor1 != address(0) &&
+                _depositor1 != ProxyUtils.getAdminAddress(address(staking))
+        );
+        vm.assume(
+            _depositor2 != address(0) &&
+                _depositor2 != ProxyUtils.getAdminAddress(address(staking))
+        );
         _amount1 = _boundToRealisticStake(_amount1);
 
         _mintGovToken(_depositor1, _amount1);
@@ -1106,6 +1114,14 @@ contract Unstake is StakingTest {
         address _anyone,
         uint256 _amount
     ) public {
+        vm.assume(
+            _depositor != address(0) &&
+                _depositor != ProxyUtils.getAdminAddress(address(staking))
+        );
+        vm.assume(
+            _anyone != address(0) &&
+                _anyone != ProxyUtils.getAdminAddress(address(staking))
+        );
         vm.assume(_depositor != _anyone);
 
         _amount = _boundToRealisticStake(_amount);

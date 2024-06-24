@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {console} from "@forge-std/console.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -368,7 +367,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         // Prevents the keyper from claiming more than they should
         uint256 maxWithdrawAmount = maxWithdraw(keyper);
-        console.log("maxWithdrawAmount", maxWithdrawAmount);
 
         // If the amount is greater than the max withdraw amount, the contract
         // will transfer the maximum amount available not the requested amount
