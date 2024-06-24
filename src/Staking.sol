@@ -368,6 +368,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         // Prevents the keyper from claiming more than they should
         uint256 maxWithdrawAmount = maxWithdraw(keyper);
+        console.log("maxWithdrawAmount", maxWithdrawAmount);
 
         // If the amount is greater than the max withdraw amount, the contract
         // will transfer the maximum amount available not the requested amount

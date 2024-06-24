@@ -752,6 +752,8 @@ contract ClaimRewards is StakingTest {
         _amount = _boundToRealisticStake(_amount);
         _jump = _boundRealisticTimeAhead(_jump);
 
+        vm.assume(_depositor1 != _depositor2);
+
         _mintGovToken(_depositor1, _amount);
         _mintGovToken(_depositor2, _amount);
 
@@ -850,6 +852,11 @@ contract ClaimRewards is StakingTest {
     }
 
     function testFuzz_RevertIf_KeyperHasNoSHares(address _depositor) public {
+        vm.assume(
+            _depositor != address(0) &&
+                _depositor != ProxyUtils.getAdminAddress(address(staking))
+        );
+
         vm.prank(_depositor);
         vm.expectRevert(Staking.KeyperHasNoShares.selector);
         staking.claimRewards(0);
