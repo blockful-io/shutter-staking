@@ -76,7 +76,7 @@ contract StakingTest is Test {
     }
 
     function _jumpAhead(uint256 _seconds) public {
-        vm.warp(block.timestamp + _seconds);
+        vm.warp(vm.getBlockTimestamp() + _seconds);
     }
 
     function _boundMintAmount(uint96 _amount) internal pure returns (uint256) {
@@ -90,7 +90,7 @@ contract StakingTest is Test {
     }
 
     function _boundUnlockedTime(uint256 _time) internal view returns (uint256) {
-        return bound(_time, block.timestamp + LOCK_PERIOD, 105 weeks);
+        return bound(_time, vm.getBlockTimestamp() + LOCK_PERIOD, 105 weeks);
     }
 
     function _mintGovToken(address _to, uint256 _amount) internal {
@@ -285,14 +285,14 @@ contract Stake is StakingTest {
 
         uint256 _shares1 = staking.convertToShares(_amount1);
 
-        uint256 timestampBefore = block.timestamp;
+        uint256 timestampBefore = vm.getBlockTimestamp();
 
         _stake(_depositor, _amount1);
 
         _jumpAhead(_jump);
         uint256 _shares2 = _convertToSharesIncludeRewardsDistributed(
             _amount2,
-            REWARD_RATE * (block.timestamp - timestampBefore)
+            REWARD_RATE * (vm.getBlockTimestamp() - timestampBefore)
         );
 
         _stake(_depositor, _amount2);
@@ -413,7 +413,7 @@ contract Stake is StakingTest {
 
         (, uint256 timestamp, ) = staking.stakes(stakeId);
 
-        assertEq(timestamp, block.timestamp, "Wrong timestamp");
+        assertEq(timestamp, vm.getBlockTimestamp(), "Wrong timestamp");
     }
 
     function testFuzz_trackLockPeriodWhenStaking(
@@ -459,8 +459,8 @@ contract Stake is StakingTest {
         assertEq(amount1, _amount1, "Wrong amount");
         assertEq(amount2, _amount2, "Wrong amount");
 
-        assertEq(timestamp, block.timestamp - 1, "Wrong timestamp");
-        assertEq(timestamp2, block.timestamp, "Wrong timestamp");
+        assertEq(timestamp, vm.getBlockTimestamp() - 1, "Wrong timestamp");
+        assertEq(timestamp2, vm.getBlockTimestamp(), "Wrong timestamp");
     }
 
     function testFuzz_increaseTotalLockedWhenStaking(
@@ -540,7 +540,7 @@ contract ClaimRewards is StakingTest {
 
         _stake(_depositor, _amount);
 
-        uint256 timestampBefore = block.timestamp;
+        uint256 timestampBefore = vm.getBlockTimestamp();
 
         _jumpAhead(_jump);
 
@@ -548,7 +548,7 @@ contract ClaimRewards is StakingTest {
         staking.claimRewards(0);
 
         uint256 expectedRewards = REWARD_RATE *
-            (block.timestamp - timestampBefore);
+            (vm.getBlockTimestamp() - timestampBefore);
 
         assertEq(
             govToken.balanceOf(_depositor),
@@ -599,7 +599,7 @@ contract ClaimRewards is StakingTest {
 
         _stake(_depositor, _amount);
 
-        uint256 timestampBefore = block.timestamp;
+        uint256 timestampBefore = vm.getBlockTimestamp();
 
         _jumpAhead(_jump);
 
@@ -607,7 +607,7 @@ contract ClaimRewards is StakingTest {
         vm.expectEmit();
         emit Staking.RewardsClaimed(
             _depositor,
-            REWARD_RATE * (block.timestamp - timestampBefore)
+            REWARD_RATE * (vm.getBlockTimestamp() - timestampBefore)
         );
 
         staking.claimRewards(0);
@@ -626,7 +626,7 @@ contract ClaimRewards is StakingTest {
 
         _stake(_depositor, _amount);
 
-        uint256 timestampBefore = block.timestamp;
+        uint256 timestampBefore = vm.getBlockTimestamp();
 
         _jumpAhead(_jump);
 
@@ -634,7 +634,7 @@ contract ClaimRewards is StakingTest {
         uint256 rewards = staking.claimRewards(0);
 
         uint256 expectedRewards = REWARD_RATE *
-            (block.timestamp - timestampBefore);
+            (vm.getBlockTimestamp() - timestampBefore);
 
         assertEq(rewards, expectedRewards, "Wrong rewards");
     }
@@ -652,13 +652,13 @@ contract ClaimRewards is StakingTest {
 
         _stake(_depositor, _amount);
 
-        uint256 timestampBefore = block.timestamp;
+        uint256 timestampBefore = vm.getBlockTimestamp();
         uint256 sharesBefore = staking.balanceOf(_depositor);
 
         _jumpAhead(_jump);
 
         uint256 expectedRewards = REWARD_RATE *
-            (block.timestamp - timestampBefore);
+            (vm.getBlockTimestamp() - timestampBefore);
 
         uint256 burnShares = _convertToSharesIncludeRewardsDistributed(
             expectedRewards,
@@ -686,12 +686,12 @@ contract ClaimRewards is StakingTest {
 
         _stake(_depositor, _amount);
 
-        uint256 timestampBefore = block.timestamp;
+        uint256 timestampBefore = vm.getBlockTimestamp();
 
         _jumpAhead(_jump);
 
         uint256 expectedRewards = REWARD_RATE *
-            (block.timestamp - timestampBefore);
+            (vm.getBlockTimestamp() - timestampBefore);
 
         uint256 burnShares = _convertToSharesIncludeRewardsDistributed(
             expectedRewards,
@@ -784,12 +784,12 @@ contract ClaimRewards is StakingTest {
 
         _stake(_depositor, _amount);
 
-        uint256 timestampBefore = block.timestamp;
+        uint256 timestampBefore = vm.getBlockTimestamp();
 
         _jumpAhead(_jump);
 
         uint256 expectedRewards = REWARD_RATE *
-            (block.timestamp - timestampBefore);
+            (vm.getBlockTimestamp() - timestampBefore);
 
         vm.prank(_depositor);
         uint256 rewards = staking.claimRewards(expectedRewards);
@@ -810,13 +810,13 @@ contract ClaimRewards is StakingTest {
 
         _stake(_depositor, _amount);
 
-        uint256 timestampBefore = block.timestamp;
+        uint256 timestampBefore = vm.getBlockTimestamp();
         uint256 sharesBefore = staking.balanceOf(_depositor);
 
         _jumpAhead(_jump);
 
         uint256 expectedRewards = REWARD_RATE *
-            (block.timestamp - timestampBefore);
+            (vm.getBlockTimestamp() - timestampBefore);
         uint256 rewardsToClaim = expectedRewards / 2;
 
         uint256 burnShares = _convertToSharesIncludeRewardsDistributed(
@@ -893,12 +893,12 @@ contract Unstake is StakingTest {
 
         uint256 stakeIndex = _stake(_depositor, _amount);
 
-        uint256 timestampBefore = block.timestamp;
+        uint256 timestampBefore = vm.getBlockTimestamp();
 
         _jumpAhead(_jump);
 
         uint256 expectedRewards = REWARD_RATE *
-            (block.timestamp - timestampBefore);
+            (vm.getBlockTimestamp() - timestampBefore);
 
         vm.prank(_depositor);
         staking.unstake(_depositor, stakeIndex, 0);
@@ -925,13 +925,13 @@ contract Unstake is StakingTest {
 
         uint256 stakeIndex = _stake(_depositor, _amount);
 
-        uint256 timestampBefore = block.timestamp;
+        uint256 timestampBefore = vm.getBlockTimestamp();
 
         _jumpAhead(_jump);
 
         uint256 shares = _convertToSharesIncludeRewardsDistributed(
             _amount,
-            REWARD_RATE * (block.timestamp - timestampBefore)
+            REWARD_RATE * (vm.getBlockTimestamp() - timestampBefore)
         );
         vm.expectEmit();
         emit Staking.Unstaked(_depositor, _amount, shares);
@@ -974,11 +974,12 @@ contract Unstake is StakingTest {
 
         uint256 stakeIndex = _stake(_depositor, _amount);
 
-        uint256 timestampBefore = block.timestamp;
+        uint256 timestampBefore = vm.getBlockTimestamp();
 
         _jumpAhead(_jump);
 
-        uint256 rewards = REWARD_RATE * (block.timestamp - timestampBefore);
+        uint256 rewards = REWARD_RATE *
+            (vm.getBlockTimestamp() - timestampBefore);
 
         vm.prank(_depositor);
         staking.unstake(_depositor, stakeIndex, 0);
