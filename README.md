@@ -5,7 +5,7 @@ SHU. Rewards are automatically compounded when the contract state is updated and
 
 The architecture consists of two contracts:
 
-1. [Staking Contract](docs/staking-contract.md): The main contract where keypers can stake SHU tokens and claim rewards.
+1. [Staking Contract](docs/staking-architecture.md): The main contract where keypers can stake SHU tokens and claim rewards.
 2. [Rewards Distributor Contract](docs/rewards-distributor.md): A contract that distributes rewards to the
    staking contract at a fixed rate per second.
 
