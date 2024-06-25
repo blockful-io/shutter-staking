@@ -131,7 +131,7 @@ stakeIds`: a mapping from keypers to their stake ids. This mapping is used
 
 Set the new rewards distribution contract address.
 
-## `setKeyper(address keyper,bool status)`
+### `setKeyper(address keyper,bool status)`
 
 Add or remove a keyper.
 
