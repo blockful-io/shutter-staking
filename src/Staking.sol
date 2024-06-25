@@ -219,11 +219,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Mint the shares
         _mint(keyper, sharesToMint);
 
-        /////////////////////////// INTERACTIONS ///////////////////////////
-
-        // Lock the SHU in the contract
-        STAKING_TOKEN.safeTransferFrom(keyper, address(this), amount);
-
         // Get next stake id and increment it
         uint256 stakeId = nextStakeId++;
 
@@ -234,6 +229,11 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         });
 
         stakesIds.add(stakeId);
+
+        /////////////////////////// INTERACTIONS ///////////////////////////
+
+        // Lock the SHU in the contract
+        STAKING_TOKEN.safeTransferFrom(keyper, address(this), amount);
 
         emit Staked(keyper, amount, sharesToMint, lockPeriod);
 
@@ -442,7 +442,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     }
 
     /// @notice Calculates the maximum amount of assets that a keyper can withdraw,
-    ///         factoring in the principal and any un-compounded rewards.
+    ///         factoring in the principal and any compounded rewards.
     ///         This function subtracts the minimum required stake and includes any amounts
     ///         currently locked. As a result, the maximum withdrawable amount might be less
     ///         than the total withdrawable at the current block timestamp.

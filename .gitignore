@@ -11,3 +11,5 @@ out/
 .env
 
 node_modules/
+
+lcov.info
