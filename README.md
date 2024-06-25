@@ -5,11 +5,10 @@ SHU. Rewards are automatically compounded when the contract state is updated and
 
 The architecture consists of two contracts:
 
-1. [Staking Contract](docs/staking-architecture.md): The main contract where keypers can stake SHU tokens and claim rewards.
-2. [Rewards Distributor Contract](docs/rewards-distributor.md): A contract that distributes rewards to the
-   staking contract at a fixed rate per second.
+1. [Staking Architecture](docs/staking-architecture.md): The main contract where keypers can stake SHU tokens and claim rewards.
+2. [Rewards Distributor Architecture](docs/rewards-distributor.md): A contract that distributes rewards to the staking contract at a fixed rate per second.
 
-The contracts are designed to be customizable, with adjustable parameters such as the lock period, minimum stake, and reward emission. Additionally, the contracts uses the Transparent Proxy pattern, where only the DAO has the permission to upgrade the contract and call the owner functions defined below.
+The contracts are designed to be customizable, with adjustable parameters such as the lock period, minimum stake, and reward emission. Additionally, the contracts uses the Transparent Proxy pattern, where only the DAO has the permission to upgrade the contract and call the owner.
 
 ## Security Considerations
 
