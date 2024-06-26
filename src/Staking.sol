@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
 import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
 import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
@@ -68,6 +68,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     mapping(uint256 id => Stake) public stakes;
 
     // @notice stake ids belonging to a keyper
+    // Uses EnumerableMap
     mapping(address keyper => EnumerableSet.UintSet stakeIds)
         private keyperStakes;
 
@@ -201,7 +202,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     ///          - Only keypers can stake
     /// @param amount The amount of SHU to stake
     /// @return The index of the stake
-
     /// TODO slippage protection
     function stake(
         uint256 amount
@@ -228,7 +228,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         _mint(keyper, sharesToMint);
 
         // Get next stake id and increment it
-        uint256 stakeId = nextStakeId++;
+        uint256 stakeId = ++nextStakeId;
 
         stakes[stakeId] = Stake({
             amount: amount,

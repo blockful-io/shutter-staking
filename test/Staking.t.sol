@@ -170,7 +170,6 @@ contract Stake is StakingTest {
         uint256 _amount
     ) public {
         _amount = _boundToRealisticStake(_amount);
-
         _mintGovToken(_depositor, _amount);
         _setKeyper(_depositor, true);
 
@@ -1016,20 +1015,25 @@ contract Unstake is StakingTest {
                 _anyone != ProxyUtils.getAdminAddress(address(staking))
         );
 
-        _mintGovToken(_depositor, _amount);
+        _mintGovToken(_depositor, _amount * 2);
         _setKeyper(_depositor, true);
 
-        uint256 stakeIndex = _stake(_depositor, _amount);
+        _stake(_depositor, _amount);
+
+        // stake again
+        uint256 stakeId = _stake(_depositor, _amount);
         assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
 
+        // setKeyper to false will remove the first stake
         _setKeyper(_depositor, false);
 
-        _jumpAhead(_jump);
-
         vm.prank(_anyone);
-        staking.unstake(_depositor, stakeIndex, 0);
+        staking.unstake(_depositor, stakeId, 0);
 
-        assertEq(govToken.balanceOf(_depositor), _amount, "Wrong balance");
+        assertEq(govToken.balanceOf(_depositor), _amount * 2, "Wrong balance");
+
+        uint256[] memory stakeIds = staking.getKeyperStakeIds(_depositor);
+        assertEq(stakeIds.length, 0, "Wrong stake ids");
     }
 
     function testFuzz_DepositorHasMultipleStakesUnstakeCorrectStake(
@@ -1192,5 +1196,45 @@ contract OwnableFunctions is StakingTest {
         for (uint256 i = 0; i < keypers.length; i++) {
             assertEq(staking.keypers(keypers[i]), isKeyper, "Wrong keyper");
         }
+    }
+
+    function testFuzz_removeKeyperUnstakeFirstStake(
+        address _keyper,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _mintGovToken(_keyper, _amount);
+        _setKeyper(_keyper, true);
+
+        uint256 expectedShares = staking.convertToShares(_amount);
+        uint256 stakeId = _stake(_keyper, _amount);
+
+        uint256 sharesBefore = staking.balanceOf(_keyper);
+        assertEq(sharesBefore, expectedShares, "Wrong shares");
+
+        uint256[] memory keyperStakeIdsBefore = staking.getKeyperStakeIds(
+            _keyper
+        );
+        assertEq(keyperStakeIdsBefore.length, 1, "Wrong stake ids");
+        assertEq(keyperStakeIdsBefore[0], stakeId, "Wrong stake id");
+
+        uint256 keyperBalanceBefore = govToken.balanceOf(_keyper);
+
+        _setKeyper(_keyper, false);
+
+        uint256 sharesAfter = staking.balanceOf(_keyper);
+        assertEq(sharesAfter, 0, "Wrong shares");
+
+        uint256 keyperBalanceAfter = govToken.balanceOf(_keyper);
+        assertEq(
+            keyperBalanceAfter - keyperBalanceBefore,
+            _amount,
+            "Wrong balance"
+        );
+
+        // get keyper stake ids
+
+        uint256[] memory keyperStakeIds = staking.getKeyperStakeIds(_keyper);
+        assertEq(keyperStakeIds.length, 0, "Wrong stake ids");
     }
 }
