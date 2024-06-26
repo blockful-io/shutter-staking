@@ -1137,3 +1137,60 @@ contract Unstake is StakingTest {
         staking.unstake(_depositor, stakeId, 0);
     }
 }
+
+contract OwnableFunctions is StakingTest {
+    function testFuzz_setRewardsDistributor(
+        address _newRewardsDistributor
+    ) public {
+        vm.assume(
+            _newRewardsDistributor != address(0) &&
+                _newRewardsDistributor != address(staking) &&
+                _newRewardsDistributor != address(govToken)
+        );
+
+        vm.expectEmit();
+        emit Staking.NewRewardsDistributor(_newRewardsDistributor);
+        staking.setRewardsDistributor(_newRewardsDistributor);
+
+        assertEq(
+            address(staking.rewardsDistributor()),
+            _newRewardsDistributor,
+            "Wrong rewards distributor"
+        );
+    }
+
+    function testFuzz_setLockPeriod(uint256 _newLockPeriod) public {
+        vm.expectEmit();
+        emit Staking.NewLockPeriod(_newLockPeriod);
+        staking.setLockPeriod(_newLockPeriod);
+
+        assertEq(staking.lockPeriod(), _newLockPeriod, "Wrong lock period");
+    }
+
+    function testFuzz_setMinStake(uint256 _newMinStake) public {
+        vm.expectEmit();
+        emit Staking.NewMinStake(_newMinStake);
+        staking.setMinStake(_newMinStake);
+
+        assertEq(staking.minStake(), _newMinStake, "Wrong min stake");
+    }
+
+    function testFuzz_setKeyper(address keyper, bool isKeyper) public {
+        vm.expectEmit();
+        emit Staking.KeyperSet(keyper, isKeyper);
+        staking.setKeyper(keyper, isKeyper);
+
+        assertEq(staking.keypers(keyper), isKeyper, "Wrong keyper");
+    }
+
+    function testFuzz_setKeypers(
+        address[] memory keypers,
+        bool isKeyper
+    ) public {
+        staking.setKeypers(keypers, isKeyper);
+
+        for (uint256 i = 0; i < keypers.length; i++) {
+            assertEq(staking.keypers(keypers[i]), isKeyper, "Wrong keyper");
+        }
+    }
+}

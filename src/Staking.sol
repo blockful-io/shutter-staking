@@ -71,7 +71,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     mapping(address keyper => EnumerableSet.UintSet stakeIds)
         private keyperStakes;
 
-    /// TODO when remove keyper also unstake the first stake
     /// @notice keypers mapping
     mapping(address keyper => bool isKeyper) public keypers;
 
@@ -98,6 +97,15 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
     /// @notice Emitted when a keyper is added or removed
     event KeyperSet(address keyper, bool isKeyper);
+
+    /// @notice Emitted when the lock period is changed
+    event NewLockPeriod(uint256 lockPeriod);
+
+    /// @notice Emitted when the minimum stake is changed
+    event NewMinStake(uint256 minStake);
+
+    /// @notice Emitted when the rewards distributor is changed
+    event NewRewardsDistributor(address rewardsDistributor);
 
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
@@ -193,7 +201,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     ///          - Only keypers can stake
     /// @param amount The amount of SHU to stake
     /// @return The index of the stake
-    /// TODO check for reentrancy
+
     /// TODO slippage protection
     function stake(
         uint256 amount
@@ -259,14 +267,12 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param stakeId The stake index
     /// @param amount The amount
     /// TODO check for reentrancy
-    /// TODO unstake only principal
     /// TODO slippage protection
     function unstake(
         address keyper,
         uint256 stakeId,
         uint256 amount
     ) external updateRewards {
-        /////////////////////////// CHECKS ///////////////////////////////
         require(
             keyperStakes[keyper].contains(stakeId),
             StakeDoesNotBelongToKeyper()
@@ -318,35 +324,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
             );
         }
 
-        /////////////////////////// EFFECTS ///////////////////////////////
-
-        // Calculates the amounf of shares to burn
-        uint256 shares = convertToShares(amount);
-
-        // Burn the shares
-        _burn(keyper, shares);
-
-        // Decrease the amount from the stake
-        stakes[stakeId].amount -= amount;
-
-        // Decrease the amount from the total locked
-        totalLocked[keyper] -= amount;
-
-        // If the stake is empty, remove it
-        if (stakes[stakeId].amount == 0) {
-            // Remove the stake from the stakes mapping
-            delete stakes[stakeId];
-
-            // Remove the stake from the keyper stakes
-            keyperStakes[keyper].remove(stakeId);
-        }
-
-        /////////////////////////// INTERACTIONS ///////////////////////////
-
-        // Transfer the SHU to the keyper
-        STAKING_TOKEN.safeTransfer(keyper, amount);
-
-        emit Unstaked(keyper, amount, shares);
+        _unstake(keyper, stakeId, amount);
     }
 
     /// @notice Claim reward for a specific reward token
@@ -396,9 +374,11 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @notice Set the rewards distributor contract
     /// @param _rewardsDistributor The address of the rewards distributor contract
     function setRewardsDistributor(
-        IRewardsDistributor _rewardsDistributor
+        address _rewardsDistributor
     ) external onlyOwner updateRewards {
-        rewardsDistributor = _rewardsDistributor;
+        rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
+
+        emit NewRewardsDistributor(_rewardsDistributor);
     }
 
     /// @notice Set the lock period
@@ -407,12 +387,16 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 _lockPeriod
     ) external onlyOwner updateRewards {
         lockPeriod = _lockPeriod;
+
+        emit NewLockPeriod(_lockPeriod);
     }
 
     /// @notice Set the minimum stake amount
     /// @param _minStake The minimum stake amount
     function setMinStake(uint256 _minStake) external onlyOwner updateRewards {
         minStake = _minStake;
+
+        emit NewMinStake(_minStake);
     }
 
     /// @notice Set a keyper
@@ -422,9 +406,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         address keyper,
         bool isKeyper
     ) external onlyOwner updateRewards {
-        keypers[keyper] = isKeyper;
-
-        emit KeyperSet(keyper, isKeyper);
+        _setKeyper(keyper, isKeyper);
     }
 
     /// @notice Set multiple keypers
@@ -435,9 +417,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         bool isKeyper
     ) external onlyOwner updateRewards {
         for (uint256 i = 0; i < _keypers.length; i++) {
-            keypers[_keypers[i]] = isKeyper;
-
-            emit KeyperSet(_keypers[i], isKeyper);
+            _setKeyper(_keypers[i], isKeyper);
         }
     }
 
@@ -540,5 +520,56 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         address keyper
     ) external view returns (uint256[] memory) {
         return keyperStakes[keyper].values();
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                          INTERNAL FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    function _setKeyper(address keyper, bool isKeyper) internal {
+        keypers[keyper] = isKeyper;
+
+        emit KeyperSet(keyper, isKeyper);
+
+        // if not a keyper anymore unstake the first stake
+        if (!isKeyper) {
+            EnumerableSet.UintSet storage stakesIds = keyperStakes[keyper];
+            if (stakesIds.length() > 0) {
+                uint256 stakeId = stakesIds.at(0);
+                _unstake(keyper, stakeId, stakes[stakeId].amount);
+            }
+        }
+    }
+
+    function _unstake(
+        address keyper,
+        uint256 stakeId,
+        uint256 amount
+    ) internal {
+        // Calculates the amounf of shares to burn
+        uint256 shares = convertToShares(amount);
+
+        // Burn the shares
+        _burn(keyper, shares);
+
+        // Decrease the amount from the stake
+        stakes[stakeId].amount -= amount;
+
+        // Decrease the amount from the total locked
+        totalLocked[keyper] -= amount;
+
+        // If the stake is empty, remove it
+        if (stakes[stakeId].amount == 0) {
+            // Remove the stake from the stakes mapping
+            delete stakes[stakeId];
+
+            // Remove the stake from the keyper stakes
+            keyperStakes[keyper].remove(stakeId);
+        }
+
+        // Transfer the SHU to the keyper
+        STAKING_TOKEN.safeTransfer(keyper, amount);
+
+        emit Unstaked(keyper, amount, shares);
     }
 }
