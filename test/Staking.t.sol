@@ -462,6 +462,22 @@ contract Stake is StakingTest {
         assertEq(timestamp2, vm.getBlockTimestamp(), "Wrong timestamp");
     }
 
+    function testFuzz_stakeReturnsStakeId(
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        vm.assume(_depositor != address(0));
+
+        uint256 stakeId = _stake(_depositor, _amount);
+
+        assertGt(stakeId, 0, "Wrong stake id");
+    }
+
     function testFuzz_increaseTotalLockedWhenStaking(
         address _depositor,
         uint256 _amount
@@ -1068,6 +1084,82 @@ contract Unstake is StakingTest {
             _amount1 + _amount2,
             "Wrong balance"
         );
+    }
+
+    function testFuzz_UnstakeOnlyAmountSpecified(
+        address _depositor,
+        uint256 _amount1,
+        uint256 _amount2,
+        uint256 _jump
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+        _amount2 = _boundToRealisticStake(_amount2);
+        _jump = _boundUnlockedTime(_jump);
+
+        vm.assume(_amount1 > _amount2);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount1);
+
+        _setKeyper(_depositor, true);
+
+        uint256 stakeId = _stake(_depositor, _amount1);
+        assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
+
+        _jumpAhead(_jump);
+
+        vm.prank(_depositor);
+        staking.unstake(_depositor, stakeId, _amount2);
+
+        assertEq(govToken.balanceOf(_depositor), _amount2, "Wrong balance");
+
+        uint256[] memory stakeIds = staking.getKeyperStakeIds(_depositor);
+        assertEq(stakeIds.length, 1, "Wrong stake ids");
+
+        (uint256 amount, , ) = staking.stakes(stakeIds[0]);
+
+        assertEq(amount, _amount1 - _amount2, "Wrong amount");
+    }
+
+    function testFuzz_RevertIf_StakeIsStillLocked(
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = bound(_jump, vm.getBlockTimestamp(), LOCK_PERIOD);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        uint256 stakeIndex = _stake(_depositor, _amount);
+
+        _jumpAhead(_jump);
+
+        vm.prank(_depositor);
+        vm.expectRevert(Staking.StakeIsStillLocked.selector);
+        staking.unstake(_depositor, stakeIndex, 0);
+    }
+
+    function testFuzz_RevertIf_StakeIsStillLockedAfterLockPeriodChangedToLessThanCurrent(
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = bound(_jump, vm.getBlockTimestamp(), LOCK_PERIOD);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        uint256 stakeIndex = _stake(_depositor, _amount);
+
+        staking.setLockPeriod(_jump);
+        _jumpAhead(_jump - 1);
+
+        vm.prank(_depositor);
+        vm.expectRevert(Staking.StakeIsStillLocked.selector);
+        staking.unstake(_depositor, stakeIndex, 0);
     }
 
     function testFuzz_RevertIf_StakeDoesNotBelongToKeyper(

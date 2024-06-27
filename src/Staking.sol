@@ -10,7 +10,6 @@ import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/E
 import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
-// TODO should be pausable?
 // TODO is this vulnerable to first deposit attack?
 // TODO check calculations
 contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
@@ -181,9 +180,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 _minStake
     ) public initializer {
         // TODO set name and symbol
-        // Does nothing but calls anyway for consistency
-        __ERC20Votes_init();
-        __Ownable2Step_init();
 
         // Transfer ownership to the DAO contract
         _transferOwnership(newOwner);
@@ -312,12 +308,14 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
                 );
             }
 
+            // TODO branch never reached
             require(
                 maxWithdraw(keyper, keyperStake.amount) >= amount,
                 WithdrawAmountTooHigh()
             );
         } else {
             // doesn't include the min stake and locked staked as the keyper is not a keyper anymore
+            // TODO branch never reached
             require(
                 convertToAssets(balanceOf(keyper)) >= amount,
                 WithdrawAmountTooHigh()
@@ -421,12 +419,34 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         }
     }
 
+    /*//////////////////////////////////////////////////////////////
+                              TRANSFER LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Transfer is disabled
+    function transfer(address, uint256) public pure override returns (bool) {
+        revert TransferDisabled();
+    }
+
+    /// @notice Transfer is disabled
+    function transferFrom(
+        address,
+        address,
+        uint256
+    ) public pure override returns (bool) {
+        revert TransferDisabled();
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                              VIEW FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
     /// @notice Calculates the maximum amount of assets that a keyper can withdraw,
     ///         factoring in the principal and any compounded rewards.
     ///         This function subtracts the minimum required stake and includes any amounts
     ///         currently locked. As a result, the maximum withdrawable amount might be less
     ///         than the total withdrawable at the current block timestamp.
-    ///         TODO revisirt natspec
+    ///         TODO revisit natspec
     /// @param keyper The keyper address
     /// @return The maximum amount of assets that a keyper can withdraw
     function maxWithdraw(address keyper) public view virtual returns (uint256) {
@@ -466,28 +486,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
             return assets - compare;
         }
     }
-
-    /*//////////////////////////////////////////////////////////////
-                              TRANSFER LOGIC
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Transfer is disabled
-    function transfer(address, uint256) public pure override returns (bool) {
-        revert TransferDisabled();
-    }
-
-    /// @notice Transfer is disabled
-    function transferFrom(
-        address,
-        address,
-        uint256
-    ) public pure override returns (bool) {
-        revert TransferDisabled();
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                              VIEW FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
 
     /// @notice Get the total amount of shares the assets are worth
     /// @param assets The amount of assets
