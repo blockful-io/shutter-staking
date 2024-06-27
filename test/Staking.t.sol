@@ -1132,13 +1132,13 @@ contract Unstake is StakingTest {
         _mintGovToken(_depositor, _amount);
         _setKeyper(_depositor, true);
 
-        uint256 stakeIndex = _stake(_depositor, _amount);
+        uint256 stakeId = _stake(_depositor, _amount);
 
         _jumpAhead(_jump);
 
         vm.prank(_depositor);
         vm.expectRevert(Staking.StakeIsStillLocked.selector);
-        staking.unstake(_depositor, stakeIndex, 0);
+        staking.unstake(_depositor, stakeId, 0);
     }
 
     function testFuzz_RevertIf_StakeIsStillLockedAfterLockPeriodChangedToLessThanCurrent(
@@ -1147,7 +1147,7 @@ contract Unstake is StakingTest {
         uint256 _jump
     ) public {
         _amount = _boundToRealisticStake(_amount);
-        _jump = bound(_jump, vm.getBlockTimestamp(), LOCK_PERIOD);
+        _jump = bound(_jump, vm.getBlockTimestamp(), LOCK_PERIOD - 1);
 
         _mintGovToken(_depositor, _amount);
         _setKeyper(_depositor, true);
@@ -1155,7 +1155,7 @@ contract Unstake is StakingTest {
         uint256 stakeIndex = _stake(_depositor, _amount);
 
         staking.setLockPeriod(_jump);
-        _jumpAhead(_jump - 1);
+        _jumpAhead(_jump);
 
         vm.prank(_depositor);
         vm.expectRevert(Staking.StakeIsStillLocked.selector);

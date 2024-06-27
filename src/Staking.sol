@@ -286,24 +286,25 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         }
 
         // Checks below only apply if keyper is still a keyper
-        // if keyper is not a keyper anymore, anyone can unstake, lock period is
+        // if keyper is not a keyper anymore, anyone can unstake for them, lock period is
         // ignored and minStake is not enforced
         if (keypers[keyper]) {
+            // Only the keyper can unstake
             require(msg.sender == keyper, OnlyKeyper());
 
             // If the lock period is less than the global lock period, the stake
             // must be locked for the lock period
             if (lockPeriod < keyperStake.lockPeriod) {
                 require(
-                    keyperStake.timestamp + lockPeriod <= block.timestamp,
+                    block.timestamp > keyperStake.timestamp + lockPeriod,
                     StakeIsStillLocked()
                 );
             } else {
                 // If the global lock period is greater than the stake lock period,
                 // the stake must be locked for the stake lock period
                 require(
-                    keyperStake.timestamp + keyperStake.lockPeriod <=
-                        block.timestamp,
+                    block.timestamp >
+                        keyperStake.timestamp + keyperStake.lockPeriod,
                     StakeIsStillLocked()
                 );
             }
