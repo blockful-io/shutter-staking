@@ -785,7 +785,7 @@ contract ClaimRewards is StakingTest {
         vm.prank(_depositor2);
         uint256 rewards2 = staking.claimRewards(0);
 
-        assertApproxEqAbs(rewards1, rewards2, 1e18, "Wrong rewards");
+        assertApproxEqAbs(rewards1, rewards2, 0.1e18, "Wrong rewards");
     }
 
     function testFuzz_DepositorGetExactSpecifiedAmountWhenClaimingRewards(
@@ -1328,5 +1328,83 @@ contract OwnableFunctions is StakingTest {
 
         uint256[] memory keyperStakeIds = staking.getKeyperStakeIds(_keyper);
         assertEq(keyperStakeIds.length, 0, "Wrong stake ids");
+    }
+}
+
+contract ViewFunctions is StakingTest {
+    function testFuzz_Revertif_MaxWithdrawDepositorHasNoStakes(
+        address _depositor
+    ) public {
+        vm.expectRevert(Staking.KeyperHasNoShares.selector);
+        uint256 maxWithdraw = staking.maxWithdraw(_depositor);
+    }
+
+    function testFuzz_maxWithdrawDepositorHasLockedStakeNoRewards(
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        uint256 stakeId = _stake(_depositor, _amount);
+
+        uint256 maxWithdraw = staking.maxWithdraw(_depositor);
+        assertEq(maxWithdraw, 0, "Wrong max withdraw");
+    }
+
+    function testFuzz_maxWithdrawDepositorHasLockedStakeAndReward(
+        address _depositor1,
+        address _depositor2,
+        uint256 _amount1,
+        uint256 _amount2,
+        uint256 _jump
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+        _amount2 = _boundToRealisticStake(_amount2);
+
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor1, _amount1);
+        _setKeyper(_depositor1, true);
+
+        uint256 stakeId = _stake(_depositor1, _amount1);
+
+        uint256 timestampBefore = vm.getBlockTimestamp();
+
+        _jumpAhead(_jump);
+
+        // depositor 2 stakes and collect rewards from distirbutor
+        _mintGovToken(_depositor2, _amount2);
+        _setKeyper(_depositor2, true);
+
+        _stake(_depositor2, _amount2);
+
+        uint256 rewards = REWARD_RATE *
+            (vm.getBlockTimestamp() - timestampBefore);
+
+        uint256 maxWithdraw = staking.maxWithdraw(_depositor1);
+        assertApproxEqAbs(maxWithdraw, rewards, 0.1e18, "Wrong max withdraw");
+    }
+
+    function testFuzz_maxWithdrawDepositorHasMultipleLockedStakes(
+        address _depositor,
+        uint256 _amount1,
+        uint256 _amount2,
+        uint256 _jump
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+        _amount2 = _boundToRealisticStake(_amount2);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount1 + _amount2);
+        _setKeyper(_depositor, true);
+
+        _stake(_depositor, _amount1);
+        _stake(_depositor, _amount2);
+
+        uint256 maxWithdraw = staking.maxWithdraw(_depositor);
+        assertEq(maxWithdraw, 0, "Wrong max withdraw");
     }
 }
