@@ -64,7 +64,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice stores the metadata associated with a given stake
-    mapping(uint256 id => Stake) public stakes;
+    mapping(uint256 id => Stake _stake) public stakes;
 
     // @notice stake ids belonging to a keyper
     // Uses EnumerableMap
@@ -345,12 +345,12 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Prevents the keyper from claiming more than they should
         uint256 maxWithdrawAmount = maxWithdraw(keyper);
 
-        // If the amount is greater than the max withdraw amount, the contract
-        // will transfer the maximum amount available not the requested amount
         // If the amount is 0, claim all the rewards
-        if (maxWithdrawAmount <= amount || amount == 0) {
+        if (amount == 0) {
             rewards = maxWithdrawAmount;
         } else {
+            require(amount <= maxWithdrawAmount, WithdrawAmountTooHigh());
+
             rewards = amount;
         }
 

@@ -1336,7 +1336,7 @@ contract ViewFunctions is StakingTest {
         address _depositor
     ) public {
         vm.expectRevert(Staking.KeyperHasNoShares.selector);
-        uint256 maxWithdraw = staking.maxWithdraw(_depositor);
+        staking.maxWithdraw(_depositor);
     }
 
     function testFuzz_maxWithdrawDepositorHasLockedStakeNoRewards(
@@ -1348,7 +1348,7 @@ contract ViewFunctions is StakingTest {
         _mintGovToken(_depositor, _amount);
         _setKeyper(_depositor, true);
 
-        uint256 stakeId = _stake(_depositor, _amount);
+        _stake(_depositor, _amount);
 
         uint256 maxWithdraw = staking.maxWithdraw(_depositor);
         assertEq(maxWithdraw, 0, "Wrong max withdraw");
@@ -1369,7 +1369,7 @@ contract ViewFunctions is StakingTest {
         _mintGovToken(_depositor1, _amount1);
         _setKeyper(_depositor1, true);
 
-        uint256 stakeId = _stake(_depositor1, _amount1);
+        _stake(_depositor1, _amount1);
 
         uint256 timestampBefore = vm.getBlockTimestamp();
 
@@ -1408,7 +1408,7 @@ contract ViewFunctions is StakingTest {
         assertEq(maxWithdraw, 0, "Wrong max withdraw");
     }
 
-    function testFuzz_convertToSharesNoSupply(uint256 assets) public {
+    function testFuzz_convertToSharesNoSupply(uint256 assets) public view {
         assertEq(staking.convertToShares(assets), assets);
     }
 
@@ -1428,7 +1428,7 @@ contract ViewFunctions is StakingTest {
         assertEq(shares, _assets, "Wrong shares");
     }
 
-    function testFuzz_convertToAssetsNoSupply(uint256 shares) public {
+    function testFuzz_convertToAssetsNoSupply(uint256 shares) public view {
         assertEq(staking.convertToAssets(shares), shares);
     }
 
@@ -1478,5 +1478,39 @@ contract ViewFunctions is StakingTest {
         assertEq(stakeIds.length, 2, "Wrong stake ids");
         assertEq(stakeIds[0], stakeId1, "Wrong stake id");
         assertEq(stakeIds[1], stakeId2, "Wrong stake id");
+    }
+}
+
+contract Transfer is StakingTest {
+    function testFuzz_RevertWith_transferDisabled(
+        address _from,
+        address _to,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_from, _amount);
+        _setKeyper(_from, true);
+
+        _stake(_from, _amount);
+
+        vm.expectRevert(Staking.TransferDisabled.selector);
+        staking.transfer(_to, _amount);
+    }
+
+    function testFuzz_RevertWith_transferFromDisabled(
+        address _from,
+        address _to,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_from, _amount);
+        _setKeyper(_from, true);
+
+        _stake(_from, _amount);
+
+        vm.expectRevert(Staking.TransferDisabled.selector);
+        staking.transferFrom(_from, _to, _amount);
     }
 }
