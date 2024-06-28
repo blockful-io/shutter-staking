@@ -165,14 +165,14 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
     /// @notice Initialize the contract
     /// @param newOwner The owner of the contract, i.e. the DAO contract address
-    /// @param stakingToken The address of the staking token, i.e. SHU
+    /// @param _stakingToken The address of the staking token, i.e. SHU
     /// @param _rewardsDistributor The address of the rewards distributor
     /// contract
     /// @param _lockPeriod The lock period in seconds
     /// @param _minStake The minimum stake amount
     function initialize(
         address newOwner,
-        address stakingToken,
+        address _stakingToken,
         address _rewardsDistributor,
         uint256 _lockPeriod,
         uint256 _minStake
@@ -182,7 +182,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Transfer ownership to the DAO contract
         _transferOwnership(newOwner);
 
-        stakingToken = IERC20(stakingToken);
+        stakingToken = IERC20(_stakingToken);
         rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
         lockPeriod = _lockPeriod;
         minStake = _minStake;
