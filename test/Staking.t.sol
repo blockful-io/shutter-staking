@@ -150,7 +150,7 @@ contract Initializer is StakingTest {
     function test_Initialize() public view {
         assertEq(staking.owner(), address(this), "Wrong owner");
         assertEq(
-            address(staking.STAKING_TOKEN()),
+            address(staking.stakingToken()),
             address(govToken),
             "Wrong staking token"
         );

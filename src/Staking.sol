@@ -20,20 +20,16 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     using EnumerableSet for EnumerableSet.UintSet;
 
     /*//////////////////////////////////////////////////////////////
-                               IMMUTABLES
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice the staking token, i.e. SHU
-    /// @dev set in initialize, can't be changed
-    IERC20 public STAKING_TOKEN;
-
-    /*//////////////////////////////////////////////////////////////
                                  VARIABLES
     //////////////////////////////////////////////////////////////*/
 
     /// @notice the rewards distributor contract
     /// @dev only owner can change
     IRewardsDistributor public rewardsDistributor;
+
+    /// @notice the staking token, i.e. SHU
+    /// @dev set in initialize, can't be changed
+    IERC20 public stakingToken;
 
     /// @notice the lock period in seconds
     /// @dev only owner can change
@@ -157,7 +153,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @notice Update rewards for a keyper
     modifier updateRewards() {
         // Distribute rewards
-        rewardsDistributor.distributeReward(address(STAKING_TOKEN));
+        rewardsDistributor.distributeReward(address(stakingToken));
 
         _;
     }
@@ -186,7 +182,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Transfer ownership to the DAO contract
         _transferOwnership(newOwner);
 
-        STAKING_TOKEN = IERC20(stakingToken);
+        stakingToken = IERC20(stakingToken);
         rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
         lockPeriod = _lockPeriod;
         minStake = _minStake;
@@ -241,7 +237,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         /////////////////////////// INTERACTIONS ///////////////////////////
 
         // Lock the SHU in the contract
-        STAKING_TOKEN.safeTransferFrom(keyper, address(this), amount);
+        stakingToken.safeTransferFrom(keyper, address(this), amount);
 
         emit Staked(keyper, amount, sharesToMint, lockPeriod);
 
@@ -365,7 +361,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         _burn(keyper, shares);
 
-        STAKING_TOKEN.safeTransfer(keyper, rewards);
+        stakingToken.safeTransfer(keyper, rewards);
 
         emit RewardsClaimed(keyper, rewards);
     }
@@ -515,7 +511,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
     /// @notice Get the amount of SHU staked for all keypers
     function totalAssets() public view virtual returns (uint256) {
-        return STAKING_TOKEN.balanceOf(address(this));
+        return stakingToken.balanceOf(address(this));
     }
 
     /// @notice Get the stake ids belonging to a keyper
@@ -571,7 +567,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         }
 
         // Transfer the SHU to the keyper
-        STAKING_TOKEN.safeTransfer(keyper, amount);
+        stakingToken.safeTransfer(keyper, amount);
 
         emit Unstaked(keyper, amount, shares);
     }
