@@ -1407,4 +1407,76 @@ contract ViewFunctions is StakingTest {
         uint256 maxWithdraw = staking.maxWithdraw(_depositor);
         assertEq(maxWithdraw, 0, "Wrong max withdraw");
     }
+
+    function testFuzz_convertToSharesNoSupply(uint256 assets) public {
+        assertEq(staking.convertToShares(assets), assets);
+    }
+
+    function testFuzz_convertToSharesHasSupplySameBlock(
+        address _depositor,
+        uint256 _assets
+    ) public {
+        _assets = _boundToRealisticStake(_assets);
+
+        _mintGovToken(_depositor, _assets);
+        _setKeyper(_depositor, true);
+
+        _stake(_depositor, _assets);
+
+        uint256 shares = staking.convertToShares(_assets);
+
+        assertEq(shares, _assets, "Wrong shares");
+    }
+
+    function testFuzz_convertToAssetsNoSupply(uint256 shares) public {
+        assertEq(staking.convertToAssets(shares), shares);
+    }
+
+    function testFuzz_convertToAssetsHasSupplySameBlock(
+        address _depositor,
+        uint256 _assets
+    ) public {
+        _assets = _boundToRealisticStake(_assets);
+
+        _mintGovToken(_depositor, _assets);
+        _setKeyper(_depositor, true);
+
+        _stake(_depositor, _assets);
+
+        uint256 shares = staking.convertToShares(_assets);
+        uint256 assets = staking.convertToAssets(shares);
+
+        assertEq(assets, _assets, "Wrong assets");
+    }
+
+    function testFuzz_totalAssets(uint256 _donation) public {
+        _donation = _boundToRealisticStake(_donation);
+
+        _mintGovToken(address(this), _donation);
+
+        govToken.transfer(address(staking), _donation);
+
+        assertEq(staking.totalAssets(), _donation, "Wrong total assets");
+    }
+
+    function testFuzz_getKeyperStakeIds(
+        address _depositor,
+        uint256 _amount1,
+        uint256 _amount2
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+        _amount2 = _boundToRealisticStake(_amount2);
+
+        _mintGovToken(_depositor, _amount1 + _amount2);
+        _setKeyper(_depositor, true);
+
+        uint256 stakeId1 = _stake(_depositor, _amount1);
+        uint256 stakeId2 = _stake(_depositor, _amount2);
+
+        uint256[] memory stakeIds = staking.getKeyperStakeIds(_depositor);
+
+        assertEq(stakeIds.length, 2, "Wrong stake ids");
+        assertEq(stakeIds[0], stakeId1, "Wrong stake id");
+        assertEq(stakeIds[1], stakeId2, "Wrong stake id");
+    }
 }
