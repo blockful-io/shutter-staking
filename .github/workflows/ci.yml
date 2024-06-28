@@ -66,12 +66,13 @@ jobs:
             # to include coverage in all directories, comment out this step. Note that because this
             # filtering applies to the lcov file, the summary table generated in the previous step will
             # still include all files and directories.
+            # Disable branch coverage temporarily due to https://github.com/foundry-rs/foundry/issues/8279
             # The `--rc lcov_branch_coverage=1` part keeps branch info in the filtered report, since lcov
             # defaults to removing branch info.
             - name: Filter directories
               run: |
                   sudo apt update && sudo apt install -y lcov
-                  lcov --remove lcov.info 'test/*' 'script/*' --output-file lcov.info --rc lcov_branch_coverage=1
+                  lcov --remove lcov.info 'test/*' 'script/*' --output-file lcov.info
 
             # This step posts a detailed coverage report as a comment and deletes previous comments on
             # each push. The below step is used to fail coverage if the specified coverage threshold is
