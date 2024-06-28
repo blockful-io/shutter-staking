@@ -17,7 +17,7 @@
         "prettier": "prettier --ignore-path .prettierignore --list-different './**/*'",
         "prettier:write": "prettier --ignore-path .prettierignore --write './**/*'",
         "test": "forge test",
-        "test:coverage": "forge coverage",
-        "test:coverage:report": "forge coverage --report lcov && genhtml lcov.info --branch-coverage --output-dir coverage"
+        "test:coverage": "forge coverage --ir-minimum",
+        "test:coverage:report": "forge coverage --ir-minimum --report lcov && genhtml lcov.info --branch-coverage --output-dir coverage"
     }
 }
