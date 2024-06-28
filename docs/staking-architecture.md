@@ -22,7 +22,7 @@
 
 ## Immutable Variables
 
--   `STAKING_TOKEN`: the SHU token address
+-   `stakingToken`: the SHU token address
 
 The staking token must be immutable. If the DAO changes the staking token, the
 keypers will not be able to withdrawn their old stakes.

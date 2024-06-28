@@ -62,3 +62,4 @@ The contracts are designed to be customizable, with adjustable parameters such a
 1. The total amount of SHU tokens staked in the contract must be equal to the
    total amount of SHU tokens staked by each keyper: `totalStaked = sum(stakes[keyper].amount)`.
 2. On unstake, `keyperStake.timestamp + lockPeriod <= block.timestamp` if global `lockPeriod` is greater or equal to the stake lock period, otherwise `keyperStake.timestamp + keyperStake.lockPeriod <= block.timestamp`.
+3. If `some(keyperStakes(keyper).length()) > 0` then `nextStakeId` != 0;
