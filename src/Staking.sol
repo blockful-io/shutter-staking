@@ -124,6 +124,9 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// amount is less than the minimum stake set by the DAO
     error FirstStakeLessThanMinStake();
 
+    /// @notice Trownn when amount is zero
+    error ZeroAmount();
+
     /// @notice Thrown when someone try to unstake a stake that doesn't belong
     /// to the keyper in question
     error StakeDoesNotBelongToKeyper();
@@ -203,6 +206,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 amount
     ) external onlyKeyper updateRewards returns (uint256) {
         /////////////////////////// CHECKS ///////////////////////////////
+        require(amount > 0, ZeroAmount());
+
         address keyper = msg.sender;
 
         // Get the keyper stakes
