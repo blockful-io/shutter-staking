@@ -36,9 +36,23 @@ contract RewardsDistributorTest is Test {
 }
 
 contract Constructor is RewardsDistributorTest {
-    function test_SetUp() public view {
+    function test_SetOwnerAndRewardToken() public view {
         assertEq(address(rewardsDistributor.rewardToken()), address(govToken));
         assertEq(Ownable(address(rewardsDistributor)).owner(), address(this));
+    }
+
+    function testFuzz_SetOwnerAndRewardTokenToArbitraryAddress(
+        address _owner,
+        address _rewardToken
+    ) public {
+        vm.assume(_owner != address(0));
+
+        RewardsDistributor rewardsDistributor = new RewardsDistributor(
+            _owner,
+            _rewardToken
+        );
+        assertEq(address(rewardsDistributor.rewardToken()), _rewardToken);
+        assertEq(Ownable(address(rewardsDistributor)).owner(), _owner);
     }
 }
 
