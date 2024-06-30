@@ -35,6 +35,13 @@ contract RewardsDistributorTest is Test {
     }
 }
 
+contract Constructor is RewardsDistributorTest {
+    function test_SetUp() public {
+        assertEq(address(rewardsDistributor.rewardToken()), address(govToken));
+        assertEq(Ownable(address(rewardsDistributor)).owner(), address(this));
+    }
+}
+
 contract OwnableFunctions is RewardsDistributorTest {
     function testFuzz_SetRewardConfigurationEmitEvent(
         address _receiver,

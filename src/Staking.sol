@@ -186,6 +186,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
         lockPeriod = _lockPeriod;
         minStake = _minStake;
+
+        nextStakeId = 1;
     }
 
     /// @notice Stake SHU
@@ -199,7 +201,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// TODO slippage protection
     function stake(
         uint256 amount
-    ) external onlyKeyper updateRewards returns (uint256) {
+    ) external onlyKeyper updateRewards returns (uint256 stakeId) {
         /////////////////////////// CHECKS ///////////////////////////////
         require(amount > 0, ZeroAmount());
 
@@ -224,7 +226,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         _mint(keyper, sharesToMint);
 
         // Get next stake id and increment it
-        uint256 stakeId = ++nextStakeId;
+        stakeId = nextStakeId++;
 
         stakes[stakeId] = Stake({
             amount: amount,
