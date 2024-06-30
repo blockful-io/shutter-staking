@@ -1394,6 +1394,8 @@ contract OwnableFunctions is StakingTest {
         uint256[] memory keyperStakeIds = staking.getKeyperStakeIds(_keyper);
         assertEq(keyperStakeIds.length, 0, "Wrong stake ids");
     }
+
+    // TEST CASES FOR NON OWNERS
 }
 
 contract ViewFunctions is StakingTest {

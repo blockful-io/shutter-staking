@@ -10,4 +10,6 @@ interface IRewardsDistributor {
         address receiver,
         uint256 emissionRate
     ) external;
+
+    function setRewardToken(address _rewardToken) external;
 }

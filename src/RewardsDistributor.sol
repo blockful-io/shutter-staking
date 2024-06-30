@@ -3,7 +3,6 @@ pragma solidity 0.8.26;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {SafeTransferLib} from "@solmate/utils/SafeTransferLib.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
@@ -49,6 +48,15 @@ contract RewardsDistributor is Ownable2StepUpgradeable, IRewardsDistributor {
 
     event RewardCollected(address indexed receiver, uint256 reward);
 
+    event RewardTokenSet(address indexed rewardToken);
+
+    /*//////////////////////////////////////////////////////////////
+                                 ERRORS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Thrown when address is zero
+    error ZeroAddress();
+
     /// @notice Initialize the contract
     /// @param newOwner The owner of the contract, i.e. the DAO contract address
     constructor(address newOwner, address _rewardToken) {
@@ -93,7 +101,7 @@ contract RewardsDistributor is Ownable2StepUpgradeable, IRewardsDistributor {
         address receiver,
         uint256 emissionRate
     ) external override onlyOwner {
-        require(receiver != address(0), "Invalid receiver");
+        require(receiver != address(0), ZeroAddress());
 
         rewardConfigurations[receiver] = RewardConfiguration(
             emissionRate,
@@ -103,10 +111,25 @@ contract RewardsDistributor is Ownable2StepUpgradeable, IRewardsDistributor {
         emit RewardConfigurationSet(receiver, emissionRate);
     }
 
+    /// @notice Withdraw funds from the contract
+    /// @param to The address to withdraw to
+    /// @param amount The amount to withdraw
     function withdrawFunds(
         address to,
         uint256 amount
-    ) external override onlyOwner {
+    ) public override onlyOwner {
         rewardToken.safeTransfer(to, amount);
+    }
+
+    /// @notice Set the reward token
+    /// @param _rewardToken The reward token
+    function setRewardToken(address _rewardToken) external onlyOwner {
+        // withdraw remaining old reward token
+        withdrawFunds(msg.sender, rewardToken.balanceOf(address(this)));
+
+        // set the new reward token
+        rewardToken = IERC20(_rewardToken);
+
+        emit RewardTokenSet(_rewardToken);
     }
 }
