@@ -17,7 +17,6 @@ contract RewardsDistributor is Ownable2StepUpgradeable, IRewardsDistributor {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice the reward token, i.e. SHU
-    /// @dev set in initialize, can't be changed
     IERC20 public rewardToken;
 
     /*//////////////////////////////////////////////////////////////
