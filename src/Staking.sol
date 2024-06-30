@@ -153,7 +153,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @notice Update rewards for a keyper
     modifier updateRewards() {
         // Distribute rewards
-        rewardsDistributor.distributeReward(address(stakingToken));
+        rewardsDistributor.collectRewards();
 
         _;
     }

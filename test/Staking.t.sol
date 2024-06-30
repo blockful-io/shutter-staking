@@ -33,16 +33,7 @@ contract StakingTest is Test {
 
         // deploy rewards distributor
         rewardsDistributor = IRewardsDistributor(
-            address(
-                new TransparentUpgradeableProxy(
-                    address(new RewardsDistributor()),
-                    address(this),
-                    abi.encodeWithSignature(
-                        "initialize(address)",
-                        address(this)
-                    )
-                )
-            )
+            new RewardsDistributor(address(this), address(govToken))
         );
 
         // deploy staking
@@ -67,7 +58,6 @@ contract StakingTest is Test {
 
         rewardsDistributor.setRewardConfiguration(
             address(staking),
-            address(govToken),
             REWARD_RATE
         );
 
