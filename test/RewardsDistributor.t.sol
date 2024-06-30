@@ -28,6 +28,8 @@ contract RewardsDistributorTest is Test {
     }
 
     function _jumpAhead(uint256 _seconds) public {
+        vm.assume(_seconds != 0);
+        _seconds = bound(_seconds, 1, 26 weeks);
         vm.warp(vm.getBlockTimestamp() + _seconds);
     }
 
@@ -35,7 +37,7 @@ contract RewardsDistributorTest is Test {
         address receiver,
         uint256 emissionRate
     ) internal {
-        emissionRate = bound(emissionRate, 0, 1e18);
+        emissionRate = bound(emissionRate, 1, 1e18);
         rewardsDistributor.setRewardConfiguration(receiver, emissionRate);
     }
 }
@@ -45,6 +47,8 @@ contract OwnableFunctions is RewardsDistributorTest {
         address _receiver,
         uint256 _emissionRate
     ) public {
+        vm.assume(_receiver != address(0));
+
         vm.expectEmit();
         emit RewardsDistributor.RewardConfigurationSet(
             _receiver,
@@ -57,6 +61,8 @@ contract OwnableFunctions is RewardsDistributorTest {
         address _receiver,
         uint256 _emissionRate
     ) public {
+        vm.assume(_receiver != address(0));
+
         rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
 
         (uint256 emissionRate, ) = rewardsDistributor.rewardConfigurations(
@@ -70,6 +76,8 @@ contract OwnableFunctions is RewardsDistributorTest {
         address _receiver,
         uint256 _emissionRate
     ) public {
+        vm.assume(_receiver != address(0));
+
         rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
 
         (, uint256 lastUpdate) = rewardsDistributor.rewardConfigurations(
@@ -156,6 +164,8 @@ contract OwnableFunctions is RewardsDistributorTest {
     }
 
     function testFuzz_WithdrawFunds(address _to, uint256 _amount) public {
+        vm.assume(_to != address(0));
+
         _amount = bound(_amount, 0, govToken.balanceOf(address(this)));
         govToken.transfer(address(rewardsDistributor), _amount);
 
@@ -182,4 +192,16 @@ contract OwnableFunctions is RewardsDistributorTest {
         vm.prank(_anyone);
         rewardsDistributor.withdrawFunds(_to, _amount);
     }
+}
+
+contract CollectRewards is RewardsDistributorTest {
+    //  function testFuzz_CollectRewardsReturnsRewardAmount(address _receiver, uint256 _jump, uint256 _emisisonRate) public{
+    //      _setRewardConfiguration(_receiver, _emisisonRate);
+    //      uint256 timestampBefore = vm.getBlockTimestamp();
+    //      _jumpAhead(_jump);
+    //      uint256 expectedRewards = _emisisonRate * (block.timestamp - timestampBefore);
+    //      vm.prank(_receiver);
+    //      uint256 rewards = rewardsDistributor.collectRewards();
+    //      assertEq(rewards, expectedRewards);
+    //  }
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {console} from "@forge-std/console.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
@@ -78,12 +79,15 @@ contract RewardsDistributor is Ownable2StepUpgradeable, IRewardsDistributor {
         // difference in time since last update
         uint256 timeDelta = block.timestamp - rewardConfiguration.lastUpdate;
 
+        console.log("time-delta", timeDelta);
+
         if (rewardConfiguration.emissionRate == 0 || timeDelta == 0) {
             // nothing to do
             return 0;
         }
 
         rewards = rewardConfiguration.emissionRate * timeDelta;
+        console.log("rewards", rewards);
 
         // update the last update timestamp
         rewardConfiguration.lastUpdate = block.timestamp;
