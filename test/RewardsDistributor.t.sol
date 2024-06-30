@@ -17,7 +17,6 @@ contract RewardsDistributorTest is Test {
         _jumpAhead(1234);
 
         govToken = new MockGovToken();
-        govToken.mint(address(this), 1_000_000_000e18);
         vm.label(address(govToken), "govToken");
 
         // deploy rewards distributor
@@ -25,20 +24,14 @@ contract RewardsDistributorTest is Test {
             address(this),
             address(govToken)
         );
+
+        govToken.mint(address(rewardsDistributor), 20_000_000e18);
     }
 
     function _jumpAhead(uint256 _seconds) public {
         vm.assume(_seconds != 0);
         _seconds = bound(_seconds, 1, 26 weeks);
         vm.warp(vm.getBlockTimestamp() + _seconds);
-    }
-
-    function _setRewardConfiguration(
-        address receiver,
-        uint256 emissionRate
-    ) internal {
-        emissionRate = bound(emissionRate, 1, 1e18);
-        rewardsDistributor.setRewardConfiguration(receiver, emissionRate);
     }
 }
 
@@ -131,14 +124,19 @@ contract OwnableFunctions is RewardsDistributorTest {
         );
         govToken.transfer(address(rewardsDistributor), _depositAmount);
 
-        uint256 balanceBefore = govToken.balanceOf(address(this));
+        uint256 balanceBeforeOwner = govToken.balanceOf(address(this));
+        uint256 balanceBeforeContract = govToken.balanceOf(
+            address(rewardsDistributor)
+        );
 
         rewardsDistributor.setRewardToken(_token);
 
         assertEq(
             govToken.balanceOf(address(this)),
-            balanceBefore + _depositAmount
+            balanceBeforeOwner + balanceBeforeContract
         );
+
+        assertEq(govToken.balanceOf(address(rewardsDistributor)), 0);
     }
 
     function testFuzz_RevertIf_SetRewardTokenNotOwner(
@@ -195,13 +193,104 @@ contract OwnableFunctions is RewardsDistributorTest {
 }
 
 contract CollectRewards is RewardsDistributorTest {
-    //  function testFuzz_CollectRewardsReturnsRewardAmount(address _receiver, uint256 _jump, uint256 _emisisonRate) public{
-    //      _setRewardConfiguration(_receiver, _emisisonRate);
-    //      uint256 timestampBefore = vm.getBlockTimestamp();
-    //      _jumpAhead(_jump);
-    //      uint256 expectedRewards = _emisisonRate * (block.timestamp - timestampBefore);
-    //      vm.prank(_receiver);
-    //      uint256 rewards = rewardsDistributor.collectRewards();
-    //      assertEq(rewards, expectedRewards);
-    //  }
+    function testFuzz_CollectRewardsReturnsRewardAmount(
+        address _receiver,
+        uint256 _jump,
+        uint256 _emissionRate
+    ) public {
+        vm.assume(address(_receiver) != address(0));
+
+        _emissionRate = bound(_emissionRate, 1, 1e18);
+        rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
+
+        uint256 timestampBefore = vm.getBlockTimestamp();
+
+        _jumpAhead(_jump);
+
+        uint256 expectedRewards = _emissionRate *
+            (vm.getBlockTimestamp() - timestampBefore);
+
+        vm.prank(_receiver);
+        uint256 rewards = rewardsDistributor.collectRewards();
+
+        assertEq(rewards, expectedRewards);
+    }
+
+    function testFuzz_CollectRewardsEmitEvent(
+        address _receiver,
+        uint256 _jump,
+        uint256 _emissionRate
+    ) public {
+        vm.assume(address(_receiver) != address(0));
+
+        _emissionRate = bound(_emissionRate, 1, 1e18);
+        rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
+
+        uint256 timestampBefore = vm.getBlockTimestamp();
+
+        _jumpAhead(_jump);
+
+        vm.expectEmit();
+        emit RewardsDistributor.RewardCollected(
+            _receiver,
+            _emissionRate * (vm.getBlockTimestamp() - timestampBefore)
+        );
+
+        vm.prank(_receiver);
+        rewardsDistributor.collectRewards();
+    }
+
+    function testFuzz_CollectRewardsTransferTokens(
+        address _receiver,
+        uint256 _jump,
+        uint256 _emissionRate
+    ) public {
+        vm.assume(address(_receiver) != address(0));
+
+        _emissionRate = bound(_emissionRate, 1, 1e18);
+        rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
+
+        uint256 timestampBefore = vm.getBlockTimestamp();
+
+        _jumpAhead(_jump);
+
+        uint256 expectedRewards = _emissionRate *
+            (vm.getBlockTimestamp() - timestampBefore);
+
+        vm.prank(_receiver);
+        rewardsDistributor.collectRewards();
+
+        assertEq(govToken.balanceOf(_receiver), expectedRewards);
+    }
+
+    function testFuzz_CollectRewardsReturnZeroWhenEmissionRateIsZero(
+        address _receiver,
+        uint256 _jump
+    ) public {
+        vm.assume(address(_receiver) != address(0));
+
+        rewardsDistributor.setRewardConfiguration(_receiver, 0);
+
+        uint256 timestampBefore = vm.getBlockTimestamp();
+
+        _jumpAhead(_jump);
+
+        vm.prank(_receiver);
+        uint256 rewards = rewardsDistributor.collectRewards();
+
+        assertEq(rewards, 0);
+    }
+
+    function testFuzz_CollectRewardsReturnZeroWhenTimeDeltaIsZero(
+        address _receiver
+    ) public {
+        vm.assume(address(_receiver) != address(0));
+
+        rewardsDistributor.setRewardConfiguration(_receiver, 1);
+
+        vm.prank(_receiver);
+        uint256 rewards = rewardsDistributor.collectRewards();
+
+        assertEq(rewards, 0);
+    }
 }
