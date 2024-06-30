@@ -37,7 +37,7 @@ contract RewardsDistributorTest is Test {
 
 contract Constructor is RewardsDistributorTest {
     function test_SetUp() public view {
-        assertEq(address(rewardsDistributor.rewardToken()), address(govToken));
+        assertEq(rewardsDistributor.rewardToken(), address(govToken));
         assertEq(Ownable(address(rewardsDistributor)).owner(), address(this));
     }
 }

@@ -150,6 +150,8 @@ contract Initializer is StakingTest {
         );
         assertEq(staking.lockPeriod(), LOCK_PERIOD, "Wrong lock period");
         assertEq(staking.minStake(), MIN_STAKE, "Wrong min stake");
+
+        assertEq(staking.exposed_nextStakeId(), 1);
     }
 
     function test_RevertIf_InitializeImplementation() public {

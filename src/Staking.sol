@@ -242,8 +242,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         stakingToken.safeTransferFrom(keyper, address(this), amount);
 
         emit Staked(keyper, amount, sharesToMint, lockPeriod);
-
-        return stakeId;
     }
 
     /// @notice Unstake SHU
