@@ -7,6 +7,7 @@
     	"no-inline-assembly": "off",
     	"no-empty-blocks": "off",
     	"no-global-import": "off",
-        gas-custom-errors": "off",
+        "gas-custom-errors": "off",
+        "func-name-mixedcase": "off
     }
 }

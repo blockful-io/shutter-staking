@@ -9,12 +9,13 @@ import {Staking} from "src/Staking.sol";
 import {RewardsDistributor} from "src/RewardsDistributor.sol";
 import {IRewardsDistributor} from "src/interfaces/IRewardsDistributor.sol";
 import {MockGovToken} from "test/mocks/MockGovToken.sol";
-import {ProxyUtils} from "test/helper/ProxyUtils.sol";
+import {ProxyUtils} from "test/helpers/ProxyUtils.sol";
+import {StakingHarness} from "test/helpers/StakingHarness.sol";
 
 contract StakingTest is Test {
     using FixedPointMathLib for uint256;
 
-    Staking public staking;
+    StakingHarness public staking;
     IRewardsDistributor public rewardsDistributor;
     MockGovToken public govToken;
 
@@ -33,22 +34,13 @@ contract StakingTest is Test {
 
         // deploy rewards distributor
         rewardsDistributor = IRewardsDistributor(
-            address(
-                new TransparentUpgradeableProxy(
-                    address(new RewardsDistributor()),
-                    address(this),
-                    abi.encodeWithSignature(
-                        "initialize(address)",
-                        address(this)
-                    )
-                )
-            )
+            new RewardsDistributor(address(this), address(govToken))
         );
 
         // deploy staking
-        address stakingImpl = address(new Staking());
+        address stakingImpl = address(new StakingHarness());
 
-        staking = Staking(
+        staking = StakingHarness(
             address(
                 new TransparentUpgradeableProxy(stakingImpl, address(this), "")
             )
@@ -63,11 +55,8 @@ contract StakingTest is Test {
             MIN_STAKE
         );
 
-        staking = Staking(staking);
-
         rewardsDistributor.setRewardConfiguration(
             address(staking),
-            address(govToken),
             REWARD_RATE
         );
 
@@ -161,6 +150,8 @@ contract Initializer is StakingTest {
         );
         assertEq(staking.lockPeriod(), LOCK_PERIOD, "Wrong lock period");
         assertEq(staking.minStake(), MIN_STAKE, "Wrong min stake");
+
+        assertEq(staking.exposed_nextStakeId(), 1);
     }
 
     function test_RevertIf_InitializeImplementation() public {
@@ -192,11 +183,18 @@ contract Stake is StakingTest {
         vm.startPrank(_depositor);
         govToken.approve(address(staking), _amount);
 
+        uint256 expectedStakeId = staking.exposed_nextStakeId();
+
         uint256 stakeId = staking.stake(_amount);
 
-        assertGt(stakeId, 0, "Wrong stake id");
+        assertEq(stakeId, expectedStakeId, "Wrong stake id");
         vm.stopPrank();
     }
+
+    function testFuzz_IncreaseNextStakeId(
+        address _depositor,
+        uint256 _amount
+    ) public {}
 
     function testFuzz_TransferTokensWhenStaking(
         address _depositor,
@@ -603,6 +601,10 @@ contract Stake is StakingTest {
     }
 
     function testFuzz_RevertIf_ZeroAmount(address _depositor) public {
+        vm.assume(
+            _depositor != address(0) &&
+                _depositor != ProxyUtils.getAdminAddress(address(staking))
+        );
         _setKeyper(_depositor, true);
 
         vm.assume(_depositor != address(0));
@@ -951,6 +953,10 @@ contract ClaimRewards is StakingTest {
         vm.expectRevert(Staking.KeyperHasNoShares.selector);
         staking.claimRewards(0);
     }
+
+    // TODO when pool balance is > 0, time passes and the new depostior can't
+    // withdraw other users rewards
+    function testFuzz_RevertIf_NoRewardsToClaimToThatUser() public {}
 }
 
 contract Unstake is StakingTest {
@@ -1404,6 +1410,8 @@ contract OwnableFunctions is StakingTest {
         uint256[] memory keyperStakeIds = staking.getKeyperStakeIds(_keyper);
         assertEq(keyperStakeIds.length, 0, "Wrong stake ids");
     }
+
+    // TEST CASES FOR NON OWNERS
 }
 
 contract ViewFunctions is StakingTest {

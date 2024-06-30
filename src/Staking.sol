@@ -40,7 +40,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     uint256 public minStake;
 
     /// @notice Unique identifier that will be used for the next stake.
-    uint256 private nextStakeId;
+    uint256 internal nextStakeId;
 
     /*//////////////////////////////////////////////////////////////
                                  STRUCTS
@@ -119,7 +119,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// amount is less than the minimum stake set by the DAO
     error FirstStakeLessThanMinStake();
 
-    /// @notice Trownn when amount is zero
+    /// @notice Trown when amount is zero
     error ZeroAmount();
 
     /// @notice Thrown when someone try to unstake a stake that doesn't belong
@@ -153,7 +153,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @notice Update rewards for a keyper
     modifier updateRewards() {
         // Distribute rewards
-        rewardsDistributor.distributeReward(address(stakingToken));
+        rewardsDistributor.collectRewards();
 
         _;
     }
@@ -186,6 +186,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
         lockPeriod = _lockPeriod;
         minStake = _minStake;
+
+        nextStakeId = 1;
     }
 
     /// @notice Stake SHU
@@ -195,11 +197,11 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     ///          - The shares are non-transferable
     ///          - Only keypers can stake
     /// @param amount The amount of SHU to stake
-    /// @return The index of the stake
+    /// @return stakeId The index of the stake
     /// TODO slippage protection
     function stake(
         uint256 amount
-    ) external onlyKeyper updateRewards returns (uint256) {
+    ) external onlyKeyper updateRewards returns (uint256 stakeId) {
         /////////////////////////// CHECKS ///////////////////////////////
         require(amount > 0, ZeroAmount());
 
@@ -224,7 +226,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         _mint(keyper, sharesToMint);
 
         // Get next stake id and increment it
-        uint256 stakeId = ++nextStakeId;
+        stakeId = nextStakeId++;
 
         stakes[stakeId] = Stake({
             amount: amount,
@@ -240,8 +242,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         stakingToken.safeTransferFrom(keyper, address(this), amount);
 
         emit Staked(keyper, amount, sharesToMint, lockPeriod);
-
-        return stakeId;
     }
 
     /// @notice Unstake SHU
