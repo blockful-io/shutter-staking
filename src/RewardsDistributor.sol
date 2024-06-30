@@ -3,12 +3,13 @@ pragma solidity 0.8.26;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
-contract RewardsDistributor is Ownable2StepUpgradeable, IRewardsDistributor {
+contract RewardsDistributor is Ownable2Step, IRewardsDistributor {
     /*//////////////////////////////////////////////////////////////
-                               LIBRARIES
+                                 LIBRARIES
     //////////////////////////////////////////////////////////////*/
     using SafeERC20 for IERC20;
 
@@ -30,7 +31,7 @@ contract RewardsDistributor is Ownable2StepUpgradeable, IRewardsDistributor {
     }
 
     /*//////////////////////////////////////////////////////////////
-                             MAPPINGS/ARRAYS
+                                MAPPINGS
     //////////////////////////////////////////////////////////////*/
 
     mapping(address receiver => RewardConfiguration configuration)
@@ -58,10 +59,8 @@ contract RewardsDistributor is Ownable2StepUpgradeable, IRewardsDistributor {
 
     /// @notice Initialize the contract
     /// @param newOwner The owner of the contract, i.e. the DAO contract address
-    constructor(address newOwner, address _rewardToken) {
-        // Transfer ownership to the DAO contract
-        _transferOwnership(newOwner);
-
+    /// @param _rewardToken The reward token, i.e. SHU
+    constructor(address newOwner, address _rewardToken) Ownable(newOwner) {
         // Set the reward token
         rewardToken = IERC20(_rewardToken);
     }

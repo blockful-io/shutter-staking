@@ -40,7 +40,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     uint256 public minStake;
 
     /// @notice Unique identifier that will be used for the next stake.
-    uint256 private nextStakeId;
+    uint256 internal nextStakeId;
 
     /*//////////////////////////////////////////////////////////////
                                  STRUCTS
