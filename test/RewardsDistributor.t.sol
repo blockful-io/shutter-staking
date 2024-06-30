@@ -41,7 +41,7 @@ contract RewardsDistributorTest is Test {
 }
 
 contract OwnableFunctions is RewardsDistributorTest {
-    function test_SetRewardConfigurationEmitEvent(
+    function testFuzz_SetRewardConfigurationEmitEvent(
         address _receiver,
         uint256 _emissionRate
     ) public {
@@ -53,7 +53,7 @@ contract OwnableFunctions is RewardsDistributorTest {
         rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
     }
 
-    function test_SetRewardConfigurationSetEmissionRate(
+    function testFuzz_SetRewardConfigurationSetEmissionRate(
         address _receiver,
         uint256 _emissionRate
     ) public {
@@ -66,7 +66,7 @@ contract OwnableFunctions is RewardsDistributorTest {
         assertEq(emissionRate, _emissionRate);
     }
 
-    function test_SetRewardConfigurationSetLastUpdate(
+    function testFuzz_SetRewardConfigurationSetLastUpdate(
         address _receiver,
         uint256 _emissionRate
     ) public {
@@ -78,14 +78,14 @@ contract OwnableFunctions is RewardsDistributorTest {
         assertEq(lastUpdate, vm.getBlockTimestamp());
     }
 
-    function test_RevertIf_SetRewardConfigurationZeroAddress(
+    function testFuzz_RevertIf_SetRewardConfigurationZeroAddress(
         uint256 _emissionRate
     ) public {
         vm.expectRevert(RewardsDistributor.ZeroAddress.selector);
         rewardsDistributor.setRewardConfiguration(address(0), _emissionRate);
     }
 
-    function test_RevertIf_SetRewardConfigurationNotOwner(
+    function testFuzz_RevertIf_SetRewardConfigurationNotOwner(
         address _anyone,
         address _receiver,
         uint256 _emissionRate
@@ -100,5 +100,86 @@ contract OwnableFunctions is RewardsDistributorTest {
         );
         vm.prank(_anyone);
         rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
+    }
+
+    function testFuzz_SetRewardTokenEmitEvent(address _token) public {
+        vm.assume(_token != address(0));
+
+        vm.expectEmit();
+        emit RewardsDistributor.RewardTokenSet(_token);
+        rewardsDistributor.setRewardToken(_token);
+    }
+
+    function testFuzz_SetRewardTokenWithdrawFunds(
+        address _token,
+        uint256 _depositAmount
+    ) public {
+        vm.assume(_token != address(0));
+
+        _depositAmount = bound(
+            _depositAmount,
+            0,
+            govToken.balanceOf(address(this))
+        );
+        govToken.transfer(address(rewardsDistributor), _depositAmount);
+
+        uint256 balanceBefore = govToken.balanceOf(address(this));
+
+        rewardsDistributor.setRewardToken(_token);
+
+        assertEq(
+            govToken.balanceOf(address(this)),
+            balanceBefore + _depositAmount
+        );
+    }
+
+    function testFuzz_RevertIf_SetRewardTokenNotOwner(
+        address _anyone,
+        address _token
+    ) public {
+        vm.assume(_token != address(0));
+        vm.assume(_anyone != address(this));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                _anyone
+            )
+        );
+        vm.prank(_anyone);
+        rewardsDistributor.setRewardToken(_token);
+    }
+
+    function testFuzz_RevertIf_SetRewardTokenZeroAddress() public {
+        vm.expectRevert(RewardsDistributor.ZeroAddress.selector);
+        rewardsDistributor.setRewardToken(address(0));
+    }
+
+    function testFuzz_WithdrawFunds(address _to, uint256 _amount) public {
+        _amount = bound(_amount, 0, govToken.balanceOf(address(this)));
+        govToken.transfer(address(rewardsDistributor), _amount);
+
+        uint256 balanceBefore = govToken.balanceOf(_to);
+
+        rewardsDistributor.withdrawFunds(_to, _amount);
+
+        assertEq(govToken.balanceOf(_to), balanceBefore + _amount);
+    }
+
+    function testFuzz_RevertIf_WithdrawFundsNotOwner(
+        address _anyone,
+        address _to,
+        uint256 _amount
+    ) public {
+        vm.assume(_anyone != address(this));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                _anyone
+            )
+        );
+        vm.prank(_anyone);
+        rewardsDistributor.withdrawFunds(_to, _amount);
     }
 }

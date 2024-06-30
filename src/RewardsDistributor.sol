@@ -124,6 +124,8 @@ contract RewardsDistributor is Ownable2StepUpgradeable, IRewardsDistributor {
     /// @notice Set the reward token
     /// @param _rewardToken The reward token
     function setRewardToken(address _rewardToken) external onlyOwner {
+        require(_rewardToken != address(0), ZeroAddress());
+
         // withdraw remaining old reward token
         withdrawFunds(msg.sender, rewardToken.balanceOf(address(this)));
 

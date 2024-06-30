@@ -941,6 +941,10 @@ contract ClaimRewards is StakingTest {
         vm.expectRevert(Staking.KeyperHasNoShares.selector);
         staking.claimRewards(0);
     }
+
+    // TODO when pool balance is > 0, time passes and the new depostior can't
+    // withdraw other users rewards
+    function testFuzz_RevertIf_NoRewardsToClaimToThatUser() public {}
 }
 
 contract Unstake is StakingTest {
