@@ -197,7 +197,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     ///          - The shares are non-transferable
     ///          - Only keypers can stake
     /// @param amount The amount of SHU to stake
-    /// @return The index of the stake
+    /// @return stakeId The index of the stake
     /// TODO slippage protection
     function stake(
         uint256 amount

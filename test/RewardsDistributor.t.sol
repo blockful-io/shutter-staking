@@ -36,7 +36,7 @@ contract RewardsDistributorTest is Test {
 }
 
 contract Constructor is RewardsDistributorTest {
-    function test_SetUp() public {
+    function test_SetUp() public view {
         assertEq(address(rewardsDistributor.rewardToken()), address(govToken));
         assertEq(Ownable(address(rewardsDistributor)).owner(), address(this));
     }
@@ -277,8 +277,6 @@ contract CollectRewards is RewardsDistributorTest {
         vm.assume(address(_receiver) != address(0));
 
         rewardsDistributor.setRewardConfiguration(_receiver, 0);
-
-        uint256 timestampBefore = vm.getBlockTimestamp();
 
         _jumpAhead(_jump);
 
