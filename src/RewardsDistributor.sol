@@ -76,20 +76,17 @@ contract RewardsDistributor is Ownable2Step, IRewardsDistributor {
         // difference in time since last update
         uint256 timeDelta = block.timestamp - rewardConfiguration.lastUpdate;
 
-        if (rewardConfiguration.emissionRate == 0 || timeDelta == 0) {
-            // nothing to do
-            return 0;
+        if (rewardConfiguration.emissionRate != 0 && timeDelta != 0) {
+            rewards = rewardConfiguration.emissionRate * timeDelta;
+
+            // update the last update timestamp
+            rewardConfiguration.lastUpdate = block.timestamp;
+
+            // transfer the reward
+            rewardToken.safeTransfer(receiver, rewards);
+
+            emit RewardCollected(receiver, rewards);
         }
-
-        rewards = rewardConfiguration.emissionRate * timeDelta;
-
-        // update the last update timestamp
-        rewardConfiguration.lastUpdate = block.timestamp;
-
-        // transfer the reward
-        rewardToken.safeTransfer(receiver, rewards);
-
-        emit RewardCollected(receiver, rewards);
     }
 
     /// @notice Add a reward configuration
