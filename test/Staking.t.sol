@@ -1270,6 +1270,37 @@ contract Unstake is StakingTest {
         staking.unstake(_depositor, stakeId, 0);
     }
 
+    function testFuzz_RevertIf_UnstakeResultsInBalanceLowerThanMinStaked(
+        address _depositor
+    ) public {
+        vm.assume(
+            _depositor != address(0) &&
+                _depositor != ProxyUtils.getAdminAddress(address(staking))
+        );
+
+        // create multiple users staking to make the rewards amount accumulated
+        // for _depositor not greater enough to withdraw the min stake
+        for (uint256 i = 0; i < 50; i++) {
+            address user = address(
+                uint160(uint256(keccak256(abi.encodePacked(i))))
+            );
+            _mintGovToken(user, MIN_STAKE);
+            _setKeyper(user, true);
+            _stake(user, MIN_STAKE);
+        }
+
+        _mintGovToken(_depositor, MIN_STAKE);
+        _setKeyper(_depositor, true);
+
+        uint256 stakeId = _stake(_depositor, MIN_STAKE);
+
+        _jumpAhead(vm.getBlockTimestamp() + LOCK_PERIOD);
+
+        vm.prank(_depositor);
+        vm.expectRevert(Staking.WithdrawAmountTooHigh.selector);
+        staking.unstake(_depositor, stakeId, MIN_STAKE);
+    }
+
     function testFuzz_RevertIf_StakeDoesNotBelongToKeyper(
         address _depositor1,
         address _depositor2,
