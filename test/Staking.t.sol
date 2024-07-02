@@ -5,6 +5,7 @@ import "@forge-std/Test.sol";
 
 import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Staking} from "src/Staking.sol";
 import {RewardsDistributor} from "src/RewardsDistributor.sol";
 import {IRewardsDistributor} from "src/interfaces/IRewardsDistributor.sol";
@@ -954,9 +955,35 @@ contract ClaimRewards is StakingTest {
         staking.claimRewards(0);
     }
 
-    // TODO when pool balance is > 0, time passes and the new depostior can't
-    // withdraw other users rewards
-    function testFuzz_RevertIf_NoRewardsToClaimToThatUser() public {}
+    function testFuzz_RevertIf_NoRewardsToClaimToThatUser(
+        address _depositor1,
+        address _depositor2,
+        uint256 _amount1,
+        uint256 _amount2,
+        uint256 _jump
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+        _amount2 = _boundToRealisticStake(_amount2);
+        _jump = _boundRealisticTimeAhead(_jump);
+
+        vm.assume(_depositor1 != _depositor2);
+
+        _mintGovToken(_depositor1, _amount1);
+        _mintGovToken(_depositor2, _amount2);
+
+        _setKeyper(_depositor1, true);
+        _setKeyper(_depositor2, true);
+
+        _stake(_depositor1, _amount1);
+
+        _jumpAhead(_jump);
+
+        _stake(_depositor2, _amount2);
+
+        vm.prank(_depositor2);
+        vm.expectRevert(Staking.NoRewardsToClaim.selector);
+        staking.claimRewards(0);
+    }
 }
 
 contract Unstake is StakingTest {
@@ -1412,6 +1439,109 @@ contract OwnableFunctions is StakingTest {
     }
 
     // TEST CASES FOR NON OWNERS
+
+    function testFuzz_RevertIf_NonOwnerSetRewardsDistributor(
+        address _newRewardsDistributor,
+        address _nonOwner
+    ) public {
+        vm.assume(
+            _newRewardsDistributor != address(0) &&
+                _newRewardsDistributor != address(staking) &&
+                _newRewardsDistributor != address(govToken)
+        );
+
+        vm.assume(
+            _nonOwner != address(0) &&
+                _nonOwner != ProxyUtils.getAdminAddress(address(staking))
+        );
+
+        vm.prank(_nonOwner);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                _nonOwner
+            )
+        );
+        staking.setRewardsDistributor(_newRewardsDistributor);
+    }
+
+    function testFuzz_RevertIf_NonOwnerSetLockPeriod(
+        uint256 _newLockPeriod,
+        address _nonOwner
+    ) public {
+        vm.assume(
+            _nonOwner != address(0) &&
+                _nonOwner != ProxyUtils.getAdminAddress(address(staking))
+        );
+
+        vm.prank(_nonOwner);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                _nonOwner
+            )
+        );
+        staking.setLockPeriod(_newLockPeriod);
+    }
+
+    function testFuzz_RevertIf_NonOwnerSetMinStake(
+        uint256 _newMinStake,
+        address _nonOwner
+    ) public {
+        vm.assume(
+            _nonOwner != address(0) &&
+                _nonOwner != ProxyUtils.getAdminAddress(address(staking))
+        );
+
+        vm.prank(_nonOwner);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                _nonOwner
+            )
+        );
+        staking.setMinStake(_newMinStake);
+    }
+
+    function testFuzz_RevertIf_NonOwnerSetKeyper(
+        address keyper,
+        bool isKeyper,
+        address _nonOwner
+    ) public {
+        vm.assume(
+            _nonOwner != address(0) &&
+                _nonOwner != ProxyUtils.getAdminAddress(address(staking))
+        );
+
+        vm.prank(_nonOwner);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                _nonOwner
+            )
+        );
+        staking.setKeyper(keyper, isKeyper);
+    }
+
+    function testFuzz_RevertIf_NonOwnerSetKeypers(
+        address[] memory keypers,
+        bool isKeyper,
+        address _nonOwner
+    ) public {
+        vm.assume(
+            _nonOwner != address(0) &&
+                _nonOwner != ProxyUtils.getAdminAddress(address(staking))
+        );
+
+        vm.prank(_nonOwner);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                _nonOwner
+            )
+        );
+        staking.setKeypers(keypers, isKeyper);
+    }
 }
 
 contract ViewFunctions is StakingTest {
