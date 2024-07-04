@@ -11,6 +11,30 @@ import {RewardsDistributor} from "src/RewardsDistributor.sol";
 import {IRewardsDistributor} from "src/interfaces/IRewardsDistributor.sol";
 import {MockGovToken} from "test/mocks/MockGovToken.sol";
 import {ProxyUtils} from "test/helpers/ProxyUtils.sol";
-import {StakingHarness} from "test/helpers/StakingHarness.sol";
+import {Staking} from "src/Staking.sol";
+import {Deploy} from "script/Deploy.s.sol";
+import "script/Constants.sol";
 
-contract StakingIntegrationTest is Test {}
+contract StakingIntegrationTest is Test {
+    function setUp() public {
+        vm.createSelectFork(vm.rpcUrl("mainnet"));
+    }
+
+    function testFork_DeployStakingContracts() public {
+        Deploy deployScript = new Deploy();
+        (Staking staking, RewardsDistributor rewardsDistributor) = deployScript
+            .run();
+
+        assertEq(staking.owner(), CONTRACT_OWNER);
+        assertEq(address(staking.stakingToken()), STAKING_TOKEN);
+        assertEq(
+            address(staking.rewardsDistributor()),
+            address(rewardsDistributor)
+        );
+        assertEq(staking.lockPeriod(), LOCK_PERIOD);
+        assertEq(staking.minStake(), MIN_STAKE);
+
+        assertEq(rewardsDistributor.owner(), CONTRACT_OWNER);
+        assertEq(address(rewardsDistributor.rewardToken()), STAKING_TOKEN);
+    }
+}
