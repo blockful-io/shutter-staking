@@ -30,15 +30,6 @@ contract StakingIntegrationTest is Test {
         (staking, rewardsDistributor) = deployScript.run();
     }
 
-    function _boundUnlockedTime(uint256 _time) internal view returns (uint256) {
-        return
-            bound(
-                _time,
-                vm.getBlockTimestamp() + LOCK_PERIOD,
-                vm.getBlockTimestamp() + 105 weeks
-            );
-    }
-
     function _boundRealisticTimeAhead(
         uint256 _time
     ) internal pure returns (uint256) {
@@ -63,7 +54,7 @@ contract StakingIntegrationTest is Test {
         IERC20(STAKING_TOKEN).transfer(address(rewardsDistributor), poolSize);
     }
 
-    function _calculateAPR(
+    function _calculateReturnOverPrincipal(
         uint256 _rewardsReceived,
         uint256 _staked,
         uint256 _days
@@ -124,23 +115,27 @@ contract StakingIntegrationTest is Test {
 
         uint256 rewardsReceived = staking.claimRewards(0);
 
-        uint256 APR = _calculateAPR(rewardsReceived, staked, jump);
+        uint256 APR = _calculateReturnOverPrincipal(
+            rewardsReceived,
+            staked,
+            jump
+        );
 
         // 1% error margin
         assertApproxEqAbs(APR, 20e18, 1e18);
     }
 
-    function testFork_FirstDepositorsAlwaysReceiveMoreRewards() public {
+    function testForkFuzz_MultipleDepositorsStakeMinAmountDifferentTimestamp(
+        uint256 _jump
+    ) public {
         uint256 depositorsCount = 400;
 
         _setRewardAndFund();
 
-        uint256 jumpBetweenStakes = 1 hours;
+        _jump = bound(_jump, 1 minutes, 12 hours);
 
         uint256[] memory timeStaked = new uint256[](depositorsCount);
         uint256 previousDepositorShares;
-
-        uint256 timestampFirstStake = vm.getBlockTimestamp();
 
         for (uint256 i = 1; i <= depositorsCount; i++) {
             address participant = address(uint160(i));
@@ -163,12 +158,11 @@ contract StakingIntegrationTest is Test {
 
             timeStaked[i - 1] = vm.getBlockTimestamp();
 
-            _jumpAhead(jumpBetweenStakes);
+            _jumpAhead(_jump);
         }
 
         uint256 previousRewardsReceived;
 
-        // collect rewards and calculate rewards
         for (uint256 i = 1; i <= depositorsCount; i++) {
             address participant = address(uint160(i));
 
@@ -185,16 +179,87 @@ contract StakingIntegrationTest is Test {
                 assertGt(rewardsReceived, previousRewardsReceived);
             }
 
-            _jumpAhead(jumpBetweenStakes);
-
             uint256 assetsAfter = staking.convertToAssets(
                 staking.balanceOf(participant)
             );
-            assertApproxEqAbs(assetsAfter, MIN_STAKE, 2);
+            assertApproxEqAbs(assetsAfter, MIN_STAKE, 1e18);
         }
     }
 
-    function testForkFuzz_MultipleDepositorsStakeMinStakeSameBlock(
+    function testFork_ClaimRewardsAtTheEndOfSemester() public {
+        _setRewardAndFund();
+
+        uint256 staked = (CIRCULATION_SUPPLY * 25) / 100;
+
+        deal(STAKING_TOKEN, address(this), staked);
+
+        vm.prank(CONTRACT_OWNER);
+        staking.setKeyper(address(this), true);
+
+        IERC20(STAKING_TOKEN).approve(address(staking), staked);
+        staking.stake(staked);
+
+        uint256 jump = 86 days;
+
+        _jumpAhead(jump);
+
+        vm.prank(CONTRACT_OWNER);
+        staking.setKeyper(address(1), true);
+
+        uint256 rewardsReceived = staking.claimRewards(0);
+
+        uint256 APR = _calculateReturnOverPrincipal(
+            rewardsReceived,
+            staked,
+            jump
+        );
+
+        // 1% error margin
+        assertApproxEqAbs(APR, 20e18, 1e18);
+    }
+
+    function testFork_ClaimRewardsEveryDayAndReestakeUntilEndSemester() public {
+        _setRewardAndFund();
+
+        uint256 staked = (CIRCULATION_SUPPLY * 25) / 100;
+
+        deal(STAKING_TOKEN, address(this), staked);
+
+        vm.prank(CONTRACT_OWNER);
+        staking.setKeyper(address(this), true);
+
+        IERC20(STAKING_TOKEN).approve(address(staking), staked);
+        staking.stake(staked);
+
+        uint256 previousTimestamp = vm.getBlockTimestamp();
+
+        for (uint256 i = 1; i < 2064; i++) {
+            _jumpAhead(1 hours);
+
+            previousTimestamp = vm.getBlockTimestamp();
+            uint256 rewardsReceived = staking.claimRewards(0);
+
+            IERC20(STAKING_TOKEN).approve(address(staking), rewardsReceived);
+            staking.stake(rewardsReceived);
+        }
+
+        _jumpAhead(1 hours);
+
+        uint256 assets = staking.convertToAssets(
+            staking.balanceOf(address(this))
+        );
+
+        uint256 APR = _calculateReturnOverPrincipal(
+            assets - staked,
+            staked,
+            86 days
+        );
+
+        // 1% error margin
+        assertApproxEqAbs(APR, 20e18, 1e18);
+    }
+
+    function testForkFuzz_MultipleDepositorsStakeMinStakeSameTimestamp(
         uint256 _depositorsCount,
         uint256 _jump
     ) public {
@@ -226,8 +291,6 @@ contract StakingIntegrationTest is Test {
         uint256 expectedRewardPerKeyper = expectedRewardsDistributed /
             depositors.length;
 
-        uint256 APR = _calculateAPR(expectedRewardPerKeyper, MIN_STAKE, _jump);
-
         _jumpAhead(_jump);
 
         // collect rewards
@@ -240,6 +303,13 @@ contract StakingIntegrationTest is Test {
             vm.stopPrank();
 
             assertApproxEqAbs(rewards, expectedRewardPerKeyper, 0.1e18);
+
+            uint256 APR = _calculateReturnOverPrincipal(
+                rewards,
+                MIN_STAKE,
+                _jump
+            );
+            assertApproxEqAbs(APR, 20e18, 1e18);
         }
     }
 }
