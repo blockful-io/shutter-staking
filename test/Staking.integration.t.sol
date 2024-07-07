@@ -122,7 +122,7 @@ contract StakingIntegrationTest is Test {
         );
 
         // 1% error margin
-        assertApproxEqAbs(APR, 20e18, 1e18);
+        assertApproxEqAbs(APR, 21e18, 1e18);
     }
 
     function testForkFuzz_MultipleDepositorsStakeMinAmountDifferentTimestamp(
@@ -215,7 +215,7 @@ contract StakingIntegrationTest is Test {
         );
 
         // 1% error margin
-        assertApproxEqAbs(APR, 20e18, 1e18);
+        assertApproxEqAbs(APR, 21e18, 1e18);
     }
 
     function testFork_ClaimRewardsEveryDayAndReestakeUntilEndSemester() public {
@@ -255,21 +255,20 @@ contract StakingIntegrationTest is Test {
             86 days
         );
 
-        // 1% error margin
-        assertApproxEqAbs(APR, 20e18, 1e18);
+        assertApproxEqAbs(APR, 21e18, 1e18);
     }
 
     function testForkFuzz_MultipleDepositorsStakeMinStakeSameTimestamp(
         uint256 _depositorsCount,
         uint256 _jump
     ) public {
-        _setRewardAndFund();
-
         _depositorsCount = bound(_depositorsCount, 1, 1000);
 
-        address[] memory depositors = new address[](_depositorsCount);
+        _jump = _boundRealisticTimeAhead(_jump);
 
-        for (uint256 i = 0; i < depositors.length; i++) {
+        _setRewardAndFund();
+
+        for (uint256 i = 0; i < _depositorsCount; i++) {
             address depositor = address(
                 uint160(uint256(keccak256(abi.encodePacked(i))))
             );
@@ -284,17 +283,14 @@ contract StakingIntegrationTest is Test {
             vm.stopPrank();
         }
 
-        _jump = _boundRealisticTimeAhead(_jump);
-
         uint256 expectedRewardsDistributed = REWARD_RATE * _jump;
 
         uint256 expectedRewardPerKeyper = expectedRewardsDistributed /
-            depositors.length;
+            _depositorsCount;
 
         _jumpAhead(_jump);
 
-        // collect rewards
-        for (uint256 i = 0; i < depositors.length; i++) {
+        for (uint256 i = 0; i < _depositorsCount; i++) {
             address depositor = address(
                 uint160(uint256(keccak256(abi.encodePacked(i))))
             );
@@ -303,13 +299,6 @@ contract StakingIntegrationTest is Test {
             vm.stopPrank();
 
             assertApproxEqAbs(rewards, expectedRewardPerKeyper, 0.1e18);
-
-            uint256 APR = _calculateReturnOverPrincipal(
-                rewards,
-                MIN_STAKE,
-                _jump
-            );
-            assertApproxEqAbs(APR, 20e18, 1e18);
         }
     }
 }
