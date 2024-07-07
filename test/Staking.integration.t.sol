@@ -118,7 +118,7 @@ contract StakingIntegrationTest is Test {
         IERC20(STAKING_TOKEN).approve(address(staking), staked);
         staking.stake(staked);
 
-        uint256 jump = 86.81 days;
+        uint256 jump = 86 days;
 
         _jumpAhead(jump);
 
@@ -128,6 +128,70 @@ contract StakingIntegrationTest is Test {
 
         // 1% error margin
         assertApproxEqAbs(APR, 20e18, 1e18);
+    }
+
+    function testFork_FirstDepositorsAlwaysReceiveMoreRewards() public {
+        uint256 depositorsCount = 400;
+
+        _setRewardAndFund();
+
+        uint256 jumpBetweenStakes = 1 hours;
+
+        uint256[] memory timeStaked = new uint256[](depositorsCount);
+        uint256 previousDepositorShares;
+
+        uint256 timestampFirstStake = vm.getBlockTimestamp();
+
+        for (uint256 i = 1; i <= depositorsCount; i++) {
+            address participant = address(uint160(i));
+
+            deal(STAKING_TOKEN, participant, MIN_STAKE);
+
+            vm.prank(CONTRACT_OWNER);
+            staking.setKeyper(participant, true);
+
+            vm.startPrank(participant);
+            IERC20(STAKING_TOKEN).approve(address(staking), MIN_STAKE);
+            staking.stake(MIN_STAKE);
+            vm.stopPrank();
+
+            uint256 shares = staking.balanceOf(participant);
+            if (i > 1) {
+                assertGt(previousDepositorShares, shares);
+            }
+            previousDepositorShares = shares;
+
+            timeStaked[i - 1] = vm.getBlockTimestamp();
+
+            _jumpAhead(jumpBetweenStakes);
+        }
+
+        uint256 previousRewardsReceived;
+
+        // collect rewards and calculate rewards
+        for (uint256 i = 1; i <= depositorsCount; i++) {
+            address participant = address(uint160(i));
+
+            uint256 expectedTimestamp = timeStaked[i - 1] + 365 days;
+            // jump the diferrence between expected and actual time
+            _jumpAhead(expectedTimestamp - vm.getBlockTimestamp());
+
+            vm.startPrank(participant);
+            uint256 rewardsReceived = staking.claimRewards(0);
+
+            vm.stopPrank();
+
+            if (i > 1) {
+                assertGt(rewardsReceived, previousRewardsReceived);
+            }
+
+            _jumpAhead(jumpBetweenStakes);
+
+            uint256 assetsAfter = staking.convertToAssets(
+                staking.balanceOf(participant)
+            );
+            assertApproxEqAbs(assetsAfter, MIN_STAKE, 2);
+        }
     }
 
     function testForkFuzz_MultipleDepositorsStakeMinStakeSameBlock(
