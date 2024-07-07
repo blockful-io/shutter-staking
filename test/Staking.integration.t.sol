@@ -20,6 +20,8 @@ contract StakingIntegrationTest is Test {
     Staking staking;
     RewardsDistributor rewardsDistributor;
 
+    uint256 constant CIRCULATION_SUPPLY = 81_000_000e18;
+
     function setUp() public {
         vm.label(STAKING_TOKEN, "SHU");
         vm.createSelectFork(vm.rpcUrl("mainnet"), 20254999);
@@ -61,6 +63,20 @@ contract StakingIntegrationTest is Test {
         IERC20(STAKING_TOKEN).transfer(address(rewardsDistributor), poolSize);
     }
 
+    function _calculateAPR(
+        uint256 _rewardsReceived,
+        uint256 _staked,
+        uint256 _days
+    ) internal pure returns (uint256) {
+        // using scalar math
+        uint256 SCALAR = 1e18;
+
+        uint256 aprScalar = ((_rewardsReceived * SCALAR) * 365 days * 100) /
+            (_staked * _days);
+
+        return aprScalar;
+    }
+
     function testFork_DeployStakingContracts() public view {
         assertEq(staking.owner(), CONTRACT_OWNER);
         assertEq(address(staking.stakingToken()), STAKING_TOKEN);
@@ -87,6 +103,31 @@ contract StakingIntegrationTest is Test {
 
         assertEq(emissionRate, REWARD_RATE);
         assertEq(lastUpdate, block.timestamp);
+    }
+
+    function testFork_25PercentParticipationRateGives20PercentAPR() public {
+        _setRewardAndFund();
+
+        uint256 staked = (CIRCULATION_SUPPLY * 25) / 100;
+
+        deal(STAKING_TOKEN, address(this), staked);
+
+        vm.prank(CONTRACT_OWNER);
+        staking.setKeyper(address(this), true);
+
+        IERC20(STAKING_TOKEN).approve(address(staking), staked);
+        staking.stake(staked);
+
+        uint256 jump = 86.81 days;
+
+        _jumpAhead(jump);
+
+        uint256 rewardsReceived = staking.claimRewards(0);
+
+        uint256 APR = _calculateAPR(rewardsReceived, staked, jump);
+
+        // 1% error margin
+        assertApproxEqAbs(APR, 20e18, 1e18);
     }
 
     function testForkFuzz_MultipleDepositorsStakeMinStakeSameBlock(
@@ -121,6 +162,8 @@ contract StakingIntegrationTest is Test {
         uint256 expectedRewardPerKeyper = expectedRewardsDistributed /
             depositors.length;
 
+        uint256 APR = _calculateAPR(expectedRewardPerKeyper, MIN_STAKE, _jump);
+
         _jumpAhead(_jump);
 
         // collect rewards
@@ -134,35 +177,5 @@ contract StakingIntegrationTest is Test {
 
             assertApproxEqAbs(rewards, expectedRewardPerKeyper, 0.1e18);
         }
-    }
-
-    function testFork_7PercentTotalSupplyStakedNoCompoundResultsIn20PercentAPR()
-        public
-    {
-        _setRewardAndFund();
-
-        uint256 totalSupply = IERC20(STAKING_TOKEN).totalSupply();
-        uint256 staked = 0.07e18 * totalSupply;
-
-        deal(STAKING_TOKEN, address(this), staked);
-
-        vm.prank(CONTRACT_OWNER);
-        staking.setKeyper(address(this), true);
-
-        staking.stake(staked);
-
-        uint256 jump = 365 days;
-
-        uint256 expectedRewardsDistributed = REWARD_RATE * jump;
-
-        uint256 rewardsReceived = staking.claimRewards(0);
-
-        assertApproxEqAbs(rewardsReceived, expectedRewardsDistributed, 0.1e18);
-        //APRi= Annualized percentage return based on how much participant i has staked versus how much they have earned in rewards over the year i.
-        //For example for a Keyper APRKeyper=(RKeyperSKeyper)*365t*100
-
-        uint256 apr = (rewardsReceived / staked) * (365 days) * 100;
-
-        assertApproxEqAbs(apr, 20, 0.1e18);
     }
 }

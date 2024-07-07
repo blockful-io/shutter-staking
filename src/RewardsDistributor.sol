@@ -98,10 +98,11 @@ contract RewardsDistributor is Ownable2Step, IRewardsDistributor {
     ) external override onlyOwner {
         require(receiver != address(0), ZeroAddress());
 
-        rewardConfigurations[receiver] = RewardConfiguration(
-            emissionRate,
-            block.timestamp
-        );
+        // only update last update if it's the first time
+        if (rewardConfigurations[receiver].lastUpdate == 0) {
+            rewardConfigurations[receiver].lastUpdate = block.timestamp;
+        }
+        rewardConfigurations[receiver].emissionRate = emissionRate;
 
         emit RewardConfigurationSet(receiver, emissionRate);
     }
