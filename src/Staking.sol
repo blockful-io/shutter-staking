@@ -177,7 +177,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 _lockPeriod,
         uint256 _minStake
     ) public initializer {
-        // TODO set name and symbol
+        __ERC20_init("Staked SHU", "sSHU");
 
         // Transfer ownership to the DAO contract
         _transferOwnership(newOwner);
@@ -198,7 +198,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     ///          - Only keypers can stake
     /// @param amount The amount of SHU to stake
     /// @return stakeId The index of the stake
-    /// TODO slippage protection
     function stake(
         uint256 amount
     ) external onlyKeyper updateRewards returns (uint256 stakeId) {

@@ -3,6 +3,7 @@ pragma solidity 0.8.26;
 
 import "@forge-std/Test.sol";
 
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -138,6 +139,8 @@ contract StakingTest is Test {
 
 contract Initializer is StakingTest {
     function test_Initialize() public view {
+        assertEq(IERC20Metadata(address(staking)).name(), "Staked SHU");
+        assertEq(IERC20Metadata(address(staking)).symbol(), "sSHU");
         assertEq(staking.owner(), address(this), "Wrong owner");
         assertEq(
             address(staking.stakingToken()),
