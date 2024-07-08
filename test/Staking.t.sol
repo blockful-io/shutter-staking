@@ -1282,16 +1282,20 @@ contract Unstake is StakingTest {
             address user = address(
                 uint160(uint256(keccak256(abi.encodePacked(i))))
             );
-            _mintGovToken(user, MIN_STAKE);
+            govToken.mint(user, MIN_STAKE);
             _setKeyper(user, true);
-            _stake(user, MIN_STAKE);
+            vm.startPrank(user);
+            govToken.approve(address(staking), MIN_STAKE);
+            staking.stake(MIN_STAKE);
+            vm.stopPrank();
         }
-
-        govToken.mint(depositor, MIN_STAKE);
 
         _setKeyper(depositor, true);
 
-        uint256 stakeId = _stake(depositor, MIN_STAKE);
+        vm.startPrank(depositor);
+        govToken.approve(address(staking), MIN_STAKE);
+        uint256 stakeId = staking.stake(MIN_STAKE);
+        vm.stopPrank();
 
         _jumpAhead(vm.getBlockTimestamp() + LOCK_PERIOD);
 
