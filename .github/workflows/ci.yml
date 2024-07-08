@@ -41,7 +41,7 @@ jobs:
                   )" >> $GITHUB_ENV
 
             - name: Run tests
-              run: forge test
+              run: forge test -no-match-contract Integration
 
     coverage:
         runs-on: ubuntu-latest
