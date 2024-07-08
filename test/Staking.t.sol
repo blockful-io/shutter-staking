@@ -3,6 +3,7 @@ pragma solidity 0.8.26;
 
 import "@forge-std/Test.sol";
 
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -138,6 +139,8 @@ contract StakingTest is Test {
 
 contract Initializer is StakingTest {
     function test_Initialize() public view {
+        assertEq(IERC20Metadata(address(staking)).name(), "Staked SHU");
+        assertEq(IERC20Metadata(address(staking)).symbol(), "sSHU");
         assertEq(staking.owner(), address(this), "Wrong owner");
         assertEq(
             address(staking.stakingToken()),
@@ -1270,13 +1273,8 @@ contract Unstake is StakingTest {
         staking.unstake(_depositor, stakeId, 0);
     }
 
-    function testFuzz_RevertIf_UnstakeResultsInBalanceLowerThanMinStaked(
-        address _depositor
-    ) public {
-        vm.assume(
-            _depositor != address(0) &&
-                _depositor != ProxyUtils.getAdminAddress(address(staking))
-        );
+    function test_RevertIf_UnstakeResultsInBalanceLowerThanMinStaked() public {
+        address depositor = address(uint160(123));
 
         // create multiple users staking to make the rewards amount accumulated
         // for _depositor not greater enough to withdraw the min stake
@@ -1284,21 +1282,27 @@ contract Unstake is StakingTest {
             address user = address(
                 uint160(uint256(keccak256(abi.encodePacked(i))))
             );
-            _mintGovToken(user, MIN_STAKE);
+            govToken.mint(user, MIN_STAKE);
             _setKeyper(user, true);
-            _stake(user, MIN_STAKE);
+            vm.startPrank(user);
+            govToken.approve(address(staking), MIN_STAKE);
+            staking.stake(MIN_STAKE);
+            vm.stopPrank();
         }
 
-        _mintGovToken(_depositor, MIN_STAKE);
-        _setKeyper(_depositor, true);
+        _setKeyper(depositor, true);
 
-        uint256 stakeId = _stake(_depositor, MIN_STAKE);
+        vm.startPrank(depositor);
+        govToken.mint(depositor, MIN_STAKE);
+        govToken.approve(address(staking), MIN_STAKE);
+        uint256 stakeId = staking.stake(MIN_STAKE);
+        vm.stopPrank();
 
         _jumpAhead(vm.getBlockTimestamp() + LOCK_PERIOD);
 
-        vm.prank(_depositor);
+        vm.prank(depositor);
         vm.expectRevert(Staking.WithdrawAmountTooHigh.selector);
-        staking.unstake(_depositor, stakeId, MIN_STAKE);
+        staking.unstake(depositor, stakeId, MIN_STAKE);
     }
 
     function testFuzz_RevertIf_StakeDoesNotBelongToKeyper(
@@ -1463,13 +1467,9 @@ contract OwnableFunctions is StakingTest {
             "Wrong balance"
         );
 
-        // get keyper stake ids
-
         uint256[] memory keyperStakeIds = staking.getKeyperStakeIds(_keyper);
         assertEq(keyperStakeIds.length, 0, "Wrong stake ids");
     }
-
-    // TEST CASES FOR NON OWNERS
 
     function testFuzz_RevertIf_NonOwnerSetRewardsDistributor(
         address _newRewardsDistributor,
@@ -1483,7 +1483,8 @@ contract OwnableFunctions is StakingTest {
 
         vm.assume(
             _nonOwner != address(0) &&
-                _nonOwner != ProxyUtils.getAdminAddress(address(staking))
+                _nonOwner != ProxyUtils.getAdminAddress(address(staking)) &&
+                _nonOwner != address(this)
         );
 
         vm.prank(_nonOwner);
@@ -1502,7 +1503,8 @@ contract OwnableFunctions is StakingTest {
     ) public {
         vm.assume(
             _nonOwner != address(0) &&
-                _nonOwner != ProxyUtils.getAdminAddress(address(staking))
+                _nonOwner != ProxyUtils.getAdminAddress(address(staking)) &&
+                _nonOwner != address(this)
         );
 
         vm.prank(_nonOwner);
@@ -1521,7 +1523,8 @@ contract OwnableFunctions is StakingTest {
     ) public {
         vm.assume(
             _nonOwner != address(0) &&
-                _nonOwner != ProxyUtils.getAdminAddress(address(staking))
+                _nonOwner != ProxyUtils.getAdminAddress(address(staking)) &&
+                _nonOwner != address(this)
         );
 
         vm.prank(_nonOwner);
@@ -1541,7 +1544,8 @@ contract OwnableFunctions is StakingTest {
     ) public {
         vm.assume(
             _nonOwner != address(0) &&
-                _nonOwner != ProxyUtils.getAdminAddress(address(staking))
+                _nonOwner != ProxyUtils.getAdminAddress(address(staking)) &&
+                _nonOwner != address(this)
         );
 
         vm.prank(_nonOwner);
@@ -1561,7 +1565,8 @@ contract OwnableFunctions is StakingTest {
     ) public {
         vm.assume(
             _nonOwner != address(0) &&
-                _nonOwner != ProxyUtils.getAdminAddress(address(staking))
+                _nonOwner != ProxyUtils.getAdminAddress(address(staking)) &&
+                _nonOwner != address(this)
         );
 
         vm.prank(_nonOwner);

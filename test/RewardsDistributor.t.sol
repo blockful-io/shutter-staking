@@ -266,7 +266,9 @@ contract CollectRewards is RewardsDistributorTest {
         uint256 _jump,
         uint256 _emissionRate
     ) public {
-        vm.assume(address(_receiver) != address(0));
+        vm.assume(
+            _receiver != address(0) && _receiver != address(rewardsDistributor)
+        );
 
         _emissionRate = bound(_emissionRate, 1, 1e18);
         rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);

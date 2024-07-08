@@ -10,7 +10,6 @@ import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
 // TODO is this vulnerable to first deposit attack?
-// TODO check calculations
 contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -177,7 +176,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 _lockPeriod,
         uint256 _minStake
     ) public initializer {
-        // TODO set name and symbol
+        __ERC20_init("Staked SHU", "sSHU");
 
         // Transfer ownership to the DAO contract
         _transferOwnership(newOwner);
@@ -198,7 +197,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     ///          - Only keypers can stake
     /// @param amount The amount of SHU to stake
     /// @return stakeId The index of the stake
-    /// TODO slippage protection
     function stake(
         uint256 amount
     ) external onlyKeyper updateRewards returns (uint256 stakeId) {
@@ -263,7 +261,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param stakeId The stake index
     /// @param amount The amount
     /// TODO check for reentrancy
-    /// TODO slippage protection
     function unstake(
         address keyper,
         uint256 stakeId,
@@ -374,7 +371,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param _rewardsDistributor The address of the rewards distributor contract
     function setRewardsDistributor(
         address _rewardsDistributor
-    ) external onlyOwner updateRewards {
+    ) external onlyOwner {
         rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
 
         emit NewRewardsDistributor(_rewardsDistributor);
@@ -382,9 +379,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
     /// @notice Set the lock period
     /// @param _lockPeriod The lock period in seconds
-    function setLockPeriod(
-        uint256 _lockPeriod
-    ) external onlyOwner updateRewards {
+    function setLockPeriod(uint256 _lockPeriod) external onlyOwner {
         lockPeriod = _lockPeriod;
 
         emit NewLockPeriod(_lockPeriod);
@@ -401,10 +396,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @notice Set a keyper
     /// @param keyper The keyper address
     /// @param isKeyper Whether the keyper is a keyper or not
-    function setKeyper(
-        address keyper,
-        bool isKeyper
-    ) external onlyOwner updateRewards {
+    function setKeyper(address keyper, bool isKeyper) external onlyOwner {
         _setKeyper(keyper, isKeyper);
     }
 
@@ -414,7 +406,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     function setKeypers(
         address[] memory _keypers,
         bool isKeyper
-    ) external onlyOwner updateRewards {
+    ) external onlyOwner {
         for (uint256 i = 0; i < _keypers.length; i++) {
             _setKeyper(_keypers[i], isKeyper);
         }
@@ -452,6 +444,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @return The maximum amount of assets that a keyper can withdraw
     function maxWithdraw(address keyper) public view virtual returns (uint256) {
         uint256 shares = balanceOf(keyper);
+
         require(shares > 0, KeyperHasNoShares());
 
         uint256 assets = convertToAssets(shares);
@@ -461,7 +454,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
             : minStake;
 
         if (assets < compare) {
-            // TODO check this
+            // need this branch as convertToAssets rounds down
             return 0;
         } else {
             return assets - compare;
@@ -481,7 +474,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         uint256 compare = locked >= minStake ? locked : minStake;
 
         if (assets < compare) {
-            // TODO check this
+            // need this branch as convertToAssets rounds down
             return 0;
         } else {
             return assets - compare;
