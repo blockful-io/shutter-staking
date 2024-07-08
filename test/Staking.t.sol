@@ -1274,9 +1274,7 @@ contract Unstake is StakingTest {
     }
 
     function test_RevertIf_UnstakeResultsInBalanceLowerThanMinStaked() public {
-        address depositor = address(
-            uint160(uint256(keccak256(abi.encodePacked(1234))))
-        );
+        address depositor = address(uint160(123));
 
         // create multiple users staking to make the rewards amount accumulated
         // for _depositor not greater enough to withdraw the min stake
