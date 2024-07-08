@@ -1293,6 +1293,7 @@ contract Unstake is StakingTest {
         _setKeyper(depositor, true);
 
         vm.startPrank(depositor);
+        govToken.mint(depositor, MIN_STAKE);
         govToken.approve(address(staking), MIN_STAKE);
         uint256 stakeId = staking.stake(MIN_STAKE);
         vm.stopPrank();
