@@ -1539,7 +1539,8 @@ contract OwnableFunctions is StakingTest {
     ) public {
         vm.assume(
             _nonOwner != address(0) &&
-                _nonOwner != ProxyUtils.getAdminAddress(address(staking))
+                _nonOwner != ProxyUtils.getAdminAddress(address(staking)) &&
+                _nonOwner != address(this)
         );
 
         vm.prank(_nonOwner);
@@ -1559,7 +1560,8 @@ contract OwnableFunctions is StakingTest {
     ) public {
         vm.assume(
             _nonOwner != address(0) &&
-                _nonOwner != ProxyUtils.getAdminAddress(address(staking))
+                _nonOwner != ProxyUtils.getAdminAddress(address(staking)) &&
+                _nonOwner != address(this)
         );
 
         vm.prank(_nonOwner);
