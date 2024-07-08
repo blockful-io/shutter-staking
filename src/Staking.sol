@@ -10,7 +10,6 @@ import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
 // TODO is this vulnerable to first deposit attack?
-// TODO check calculations
 contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -262,7 +261,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param stakeId The stake index
     /// @param amount The amount
     /// TODO check for reentrancy
-    /// TODO slippage protection
     function unstake(
         address keyper,
         uint256 stakeId,
