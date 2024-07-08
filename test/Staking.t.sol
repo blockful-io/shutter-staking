@@ -1287,7 +1287,8 @@ contract Unstake is StakingTest {
             _stake(user, MIN_STAKE);
         }
 
-        _mintGovToken(depositor, MIN_STAKE);
+        govToken.mint(depositor, MIN_STAKE);
+
         _setKeyper(depositor, true);
 
         uint256 stakeId = _stake(depositor, MIN_STAKE);
