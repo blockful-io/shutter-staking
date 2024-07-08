@@ -1461,13 +1461,9 @@ contract OwnableFunctions is StakingTest {
             "Wrong balance"
         );
 
-        // get keyper stake ids
-
         uint256[] memory keyperStakeIds = staking.getKeyperStakeIds(_keyper);
         assertEq(keyperStakeIds.length, 0, "Wrong stake ids");
     }
-
-    // TEST CASES FOR NON OWNERS
 
     function testFuzz_RevertIf_NonOwnerSetRewardsDistributor(
         address _newRewardsDistributor,
@@ -1481,7 +1477,8 @@ contract OwnableFunctions is StakingTest {
 
         vm.assume(
             _nonOwner != address(0) &&
-                _nonOwner != ProxyUtils.getAdminAddress(address(staking))
+                _nonOwner != ProxyUtils.getAdminAddress(address(staking)) &&
+                _nonOwner != address(this)
         );
 
         vm.prank(_nonOwner);
@@ -1500,7 +1497,8 @@ contract OwnableFunctions is StakingTest {
     ) public {
         vm.assume(
             _nonOwner != address(0) &&
-                _nonOwner != ProxyUtils.getAdminAddress(address(staking))
+                _nonOwner != ProxyUtils.getAdminAddress(address(staking)) &&
+                _nonOwner != address(this)
         );
 
         vm.prank(_nonOwner);
@@ -1519,7 +1517,8 @@ contract OwnableFunctions is StakingTest {
     ) public {
         vm.assume(
             _nonOwner != address(0) &&
-                _nonOwner != ProxyUtils.getAdminAddress(address(staking))
+                _nonOwner != ProxyUtils.getAdminAddress(address(staking)) &&
+                _nonOwner != address(this)
         );
 
         vm.prank(_nonOwner);
