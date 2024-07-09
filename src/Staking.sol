@@ -332,13 +332,14 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
             );
         }
 
-        uint256 shares = _unstake(keyper, stakeId, amount);
-
-        emit Unstaked(keyper, amount, shares);
+        _unstake(keyper, stakeId, amount);
     }
 
     /// @notice Unstake and claim all rewards
-    function unstakeAndClaimAllRewards(uint256 stakeId) external onlyKeyper {
+    /// @param stakeId The stake index
+    function unstakeAndClaimAllRewards(
+        uint256 stakeId
+    ) external onlyKeyper updateRewards {
         address keyper = msg.sender;
         require(
             keyperStakes[keyper].contains(stakeId),
@@ -347,8 +348,6 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         Stake memory keyperStake = stakes[stakeId];
 
         require(keyperStake.amount > 0, StakeDoesNotExist());
-
-        uint256 amount = keyperStake.amount;
 
         if (lockPeriod < keyperStake.lockPeriod) {
             require(
@@ -363,9 +362,27 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
             );
         }
 
-        require(maxWithdraw(keyper, amount) >= amount, WithdrawAmountTooHigh());
+        uint256 amount = maxWithdraw(keyper, keyperStake.amount);
 
-        uint256 shares = _unstake(keyper, stakeId, amount);
+        require(amount >= keyperStake.amount, WithdrawAmountTooHigh());
+
+        // Calculates the amounf of shares to burn
+        uint256 shares = convertToShares(amount);
+
+        // Burn the shares
+        _burn(keyper, shares);
+
+        // Decrease the amount from the total locked
+        totalLocked[keyper] -= keyperStake.amount;
+
+        // Remove the stake from the stakes mapping
+        delete stakes[stakeId];
+
+        // Remove the stake from the keyper stakes
+        keyperStakes[keyper].remove(stakeId);
+
+        // Transfer the SHU to the keyper
+        stakingToken.safeTransfer(keyper, amount);
 
         emit UnstakedAndClaimedAllRewards(keyper, amount, shares);
     }
@@ -584,12 +601,12 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         address keyper,
         uint256 stakeId,
         uint256 amount
-    ) internal returns (uint256 burnedShares) {
+    ) internal {
         // Calculates the amounf of shares to burn
-        burnedShares = convertToShares(amount);
+        uint256 shares = convertToShares(amount);
 
         // Burn the shares
-        _burn(keyper, burnedShares);
+        _burn(keyper, shares);
 
         // Decrease the amount from the stake
         stakes[stakeId].amount -= amount;
@@ -608,5 +625,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         // Transfer the SHU to the keyper
         stakingToken.safeTransfer(keyper, amount);
+
+        emit Unstaked(keyper, amount, shares);
     }
 }

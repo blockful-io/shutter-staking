@@ -82,8 +82,6 @@ contract RewardsDistributor is Ownable2Step, IRewardsDistributor {
 
         uint256 rewards = rewardConfiguration.emissionRate * timeDelta;
 
-        uint256 rewards = rewardConfiguration.emissionRate * timeDelta;
-
         if (rewards > 0 && funds >= rewards) {
             // update the last update timestamp
             rewardConfiguration.lastUpdate = block.timestamp;

@@ -990,7 +990,7 @@ contract ClaimRewards is StakingTest {
 }
 
 contract Unstake is StakingTest {
-    function testFuzz_UpdateStakerGovTokenBalanceWhenUnstaking(
+    function testFuzz_UnstakeUpdateStakerGovTokenBalanceWhenUnstaking(
         address _depositor,
         uint256 _amount,
         uint256 _jump
@@ -1013,7 +1013,7 @@ contract Unstake is StakingTest {
         assertEq(govToken.balanceOf(_depositor), _amount, "Wrong balance");
     }
 
-    function testFuzz_GovTokenBalanceUnchangedWhenUnstakingOnlyStaker(
+    function testFuzz_UnstakeNotTransferRewards(
         address _depositor,
         uint256 _amount,
         uint256 _jump
@@ -1374,6 +1374,78 @@ contract Unstake is StakingTest {
         vm.prank(_anyone);
         vm.expectRevert(Staking.OnlyKeyper.selector);
         staking.unstake(_depositor, stakeId, 0);
+    }
+}
+
+contract UnstakeAndClaimRewards is StakingTest {
+    function testFuzz_UpdateStakerGovTokenBalanceWhenUnstakingAndCollectingRewards(
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount + MIN_STAKE);
+        _setKeyper(_depositor, true);
+
+        // first deposits min stake to avoid revert
+        _stake(_depositor, MIN_STAKE);
+
+        uint256 stakeId = _stake(_depositor, _amount);
+
+        assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
+
+        uint256 timestampBefore = vm.getBlockTimestamp();
+
+        _jumpAhead(_jump);
+
+        uint256 expectedRewards = REWARD_RATE *
+            (vm.getBlockTimestamp() - timestampBefore);
+
+        vm.prank(_depositor);
+        staking.unstakeAndClaimAllRewards(stakeId);
+
+        assertEq(
+            govToken.balanceOf(_depositor),
+            _amount + expectedRewards,
+            "Wrong balance"
+        );
+    }
+
+    function testFuzz_GovTokenBalanceUnchangedWhenUnstakingAndCollectingRewardsOnlyStaker(
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount + MIN_STAKE);
+        _setKeyper(_depositor, true);
+
+        // first deposits min stake to avoid revert
+        _stake(_depositor, MIN_STAKE);
+
+        uint256 stakeId = _stake(_depositor, _amount);
+
+        uint256 timestampBefore = vm.getBlockTimestamp();
+
+        _jumpAhead(_jump);
+
+        uint256 expectedRewards = REWARD_RATE *
+            (vm.getBlockTimestamp() - timestampBefore);
+
+        vm.prank(_depositor);
+        staking.unstakeAndClaimAllRewards(stakeId);
+
+        if (expectedRewards > 0) {
+            assertEq(
+                govToken.balanceOf(address(staking)),
+                expectedRewards,
+                "Wrong balance"
+            );
+        }
     }
 }
 
