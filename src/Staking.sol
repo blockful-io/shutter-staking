@@ -84,22 +84,33 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     );
 
     /// @notice Emitted when a keyper unstakes SHU
-    event Unstaked(address user, uint256 amount, uint256 shares);
+    event Unstaked(
+        address indexed user,
+        uint256 indexed amount,
+        uint256 shares
+    );
+
+    /// @notice Emitted when a keyepr unstakes and claims all rewards
+    event UnstakedAndClaimedAllRewards(
+        address indexed user,
+        uint256 indexed amount,
+        uint256 shares
+    );
 
     /// @notice Emitted when a keyper claims rewards
-    event RewardsClaimed(address user, uint256 rewards);
+    event RewardsClaimed(address indexed user, uint256 indexed rewards);
 
     /// @notice Emitted when a keyper is added or removed
-    event KeyperSet(address keyper, bool isKeyper);
+    event KeyperSet(address indexed keyper, bool indexed isKeyper);
 
     /// @notice Emitted when the lock period is changed
-    event NewLockPeriod(uint256 lockPeriod);
+    event NewLockPeriod(uint256 indexed lockPeriod);
 
     /// @notice Emitted when the minimum stake is changed
-    event NewMinStake(uint256 minStake);
+    event NewMinStake(uint256 indexed minStake);
 
     /// @notice Emitted when the rewards distributor is changed
-    event NewRewardsDistributor(address rewardsDistributor);
+    event NewRewardsDistributor(address indexed rewardsDistributor);
 
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
@@ -279,6 +290,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         if (amount == 0) {
             amount = keyperStake.amount;
         } else {
+            // if amount is specified, it must be less than the stake amount
             require(amount <= keyperStake.amount, WithdrawAmountTooHigh());
         }
 
@@ -320,7 +332,42 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
             );
         }
 
-        _unstake(keyper, stakeId, amount);
+        uint256 shares = _unstake(keyper, stakeId, amount);
+
+        emit Unstaked(keyper, amount, shares);
+    }
+
+    /// @notice Unstake and claim all rewards
+    function unstakeAndClaimAllRewards(uint256 stakeId) external onlyKeyper {
+        address keyper = msg.sender;
+        require(
+            keyperStakes[keyper].contains(stakeId),
+            StakeDoesNotBelongToKeyper()
+        );
+        Stake memory keyperStake = stakes[stakeId];
+
+        require(keyperStake.amount > 0, StakeDoesNotExist());
+
+        uint256 amount = keyperStake.amount;
+
+        if (lockPeriod < keyperStake.lockPeriod) {
+            require(
+                block.timestamp > keyperStake.timestamp + lockPeriod,
+                StakeIsStillLocked()
+            );
+        } else {
+            require(
+                block.timestamp >
+                    keyperStake.timestamp + keyperStake.lockPeriod,
+                StakeIsStillLocked()
+            );
+        }
+
+        require(maxWithdraw(keyper, amount) >= amount, WithdrawAmountTooHigh());
+
+        uint256 shares = _unstake(keyper, stakeId, amount);
+
+        emit UnstakedAndClaimedAllRewards(keyper, amount, shares);
     }
 
     /// @notice Claim reward for a specific reward token
@@ -537,12 +584,12 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         address keyper,
         uint256 stakeId,
         uint256 amount
-    ) internal {
+    ) internal returns (uint256 burnedShares) {
         // Calculates the amounf of shares to burn
-        uint256 shares = convertToShares(amount);
+        burnedShares = convertToShares(amount);
 
         // Burn the shares
-        _burn(keyper, shares);
+        _burn(keyper, burnedShares);
 
         // Decrease the amount from the stake
         stakes[stakeId].amount -= amount;
@@ -561,7 +608,5 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         // Transfer the SHU to the keyper
         stakingToken.safeTransfer(keyper, amount);
-
-        emit Unstaked(keyper, amount, shares);
     }
 }
