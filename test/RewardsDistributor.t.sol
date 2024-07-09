@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import "@forge-std/Test.sol";
+import "@forge-std/StdUtils.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {RewardsDistributor} from "src/RewardsDistributor.sol";
@@ -24,14 +25,13 @@ contract RewardsDistributorTest is Test {
             address(this),
             address(govToken)
         );
-
-        govToken.mint(address(rewardsDistributor), 20_000_000e18);
     }
 
-    function _jumpAhead(uint256 _seconds) public {
-        vm.assume(_seconds != 0);
+    function _jumpAhead(uint256 _seconds) public returns (uint256) {
         _seconds = bound(_seconds, 1, 26 weeks);
         vm.warp(vm.getBlockTimestamp() + _seconds);
+
+        return _seconds;
     }
 }
 
@@ -98,6 +98,28 @@ contract OwnableFunctions is RewardsDistributorTest {
             _receiver
         );
         assertEq(lastUpdate, vm.getBlockTimestamp());
+    }
+
+    function testFuzz_DoNotSetLastUpdateIfIsNotTheFirstTime(
+        address _receiver,
+        uint256 _emissionRate
+    ) public {
+        vm.assume(_receiver != address(0));
+
+        rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
+
+        (, uint256 lastUpdateBefore) = rewardsDistributor.rewardConfigurations(
+            _receiver
+        );
+
+        vm.warp(vm.getBlockTimestamp() + 1);
+        rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
+
+        (, uint256 lastUpdateAfter) = rewardsDistributor.rewardConfigurations(
+            _receiver
+        );
+
+        assertEq(lastUpdateBefore, lastUpdateAfter);
     }
 
     function testFuzz_RevertIf_SetRewardConfigurationZeroAddress(
@@ -224,12 +246,10 @@ contract CollectRewards is RewardsDistributorTest {
         _emissionRate = bound(_emissionRate, 1, 1e18);
         rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
 
-        uint256 timestampBefore = vm.getBlockTimestamp();
+        uint256 jump = _jumpAhead(_jump);
+        govToken.mint(address(rewardsDistributor), _emissionRate * jump);
 
-        _jumpAhead(_jump);
-
-        uint256 expectedRewards = _emissionRate *
-            (vm.getBlockTimestamp() - timestampBefore);
+        uint256 expectedRewards = _emissionRate * jump;
 
         vm.prank(_receiver);
         uint256 rewards = rewardsDistributor.collectRewards();
@@ -249,7 +269,8 @@ contract CollectRewards is RewardsDistributorTest {
 
         uint256 timestampBefore = vm.getBlockTimestamp();
 
-        _jumpAhead(_jump);
+        uint256 jump = _jumpAhead(_jump);
+        govToken.mint(address(rewardsDistributor), _emissionRate * jump);
 
         vm.expectEmit();
         emit RewardsDistributor.RewardCollected(
@@ -275,7 +296,8 @@ contract CollectRewards is RewardsDistributorTest {
 
         uint256 timestampBefore = vm.getBlockTimestamp();
 
-        _jumpAhead(_jump);
+        uint256 jump = _jumpAhead(_jump);
+        govToken.mint(address(rewardsDistributor), _emissionRate * jump);
 
         uint256 expectedRewards = _emissionRate *
             (vm.getBlockTimestamp() - timestampBefore);
@@ -308,6 +330,30 @@ contract CollectRewards is RewardsDistributorTest {
         vm.assume(address(_receiver) != address(0));
 
         rewardsDistributor.setRewardConfiguration(_receiver, 1);
+
+        vm.prank(_receiver);
+        uint256 rewards = rewardsDistributor.collectRewards();
+
+        assertEq(rewards, 0);
+    }
+
+    function testFuzz_CollectRewardsWhenFundsAreNotEnough(
+        address _receiver,
+        uint256 _jump,
+        uint256 _emissionRate
+    ) public {
+        vm.assume(address(_receiver) != address(0));
+
+        _emissionRate = bound(_emissionRate, 0.01e18, 1e18);
+        rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
+
+        uint256 jump = _jumpAhead(_jump);
+
+        deal(
+            address(govToken),
+            address(rewardsDistributor),
+            _emissionRate * jump - 1
+        );
 
         vm.prank(_receiver);
         uint256 rewards = rewardsDistributor.collectRewards();

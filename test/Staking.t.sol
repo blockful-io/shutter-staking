@@ -954,7 +954,7 @@ contract ClaimRewards is StakingTest {
         );
 
         vm.prank(_depositor);
-        vm.expectRevert(Staking.KeyperHasNoShares.selector);
+        vm.expectRevert(Staking.UserHasNoShares.selector);
         staking.claimRewards(0);
     }
 
@@ -990,7 +990,7 @@ contract ClaimRewards is StakingTest {
 }
 
 contract Unstake is StakingTest {
-    function testFuzz_UpdateStakerGovTokenBalanceWhenUnstaking(
+    function testFuzz_UnstakeUpdateStakerGovTokenBalanceWhenUnstaking(
         address _depositor,
         uint256 _amount,
         uint256 _jump
@@ -1013,7 +1013,7 @@ contract Unstake is StakingTest {
         assertEq(govToken.balanceOf(_depositor), _amount, "Wrong balance");
     }
 
-    function testFuzz_GovTokenBalanceUnchangedWhenUnstakingOnlyStaker(
+    function testFuzz_UnstakeNotTransferRewards(
         address _depositor,
         uint256 _amount,
         uint256 _jump
@@ -1377,6 +1377,177 @@ contract Unstake is StakingTest {
     }
 }
 
+contract UnstakeAndClaimRewards is StakingTest {
+    function testFuzz_UpdateStakerGovTokenBalanceWhenUnstakingAndCollectingRewards(
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount + MIN_STAKE);
+        _setKeyper(_depositor, true);
+
+        // first deposits min stake to avoid revert
+        _stake(_depositor, MIN_STAKE);
+
+        uint256 stakeId = _stake(_depositor, _amount);
+
+        assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
+
+        uint256 timestampBefore = vm.getBlockTimestamp();
+
+        _jumpAhead(_jump);
+
+        uint256 expectedRewards = REWARD_RATE *
+            (vm.getBlockTimestamp() - timestampBefore);
+
+        vm.prank(_depositor);
+        staking.unstakeAndClaimAllRewards(stakeId);
+
+        assertEq(
+            govToken.balanceOf(_depositor),
+            _amount + expectedRewards,
+            "Wrong balance"
+        );
+    }
+
+    function testFuzz_GovTokenBalanceUnchangedWhenUnstakingAndCollectingRewardsOnlyStaker(
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount + MIN_STAKE);
+        _setKeyper(_depositor, true);
+
+        // first deposits min stake to avoid revert
+        _stake(_depositor, MIN_STAKE);
+
+        uint256 stakeId = _stake(_depositor, _amount);
+
+        uint256 timestampBefore = vm.getBlockTimestamp();
+
+        _jumpAhead(_jump);
+
+        vm.prank(_depositor);
+        staking.unstakeAndClaimAllRewards(stakeId);
+
+        assertEq(
+            govToken.balanceOf(address(staking)),
+            MIN_STAKE,
+            "Wrong balance"
+        );
+    }
+
+    function testFuzz_EmitRewardsClaimedEventWhenClaimingRewards(
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount + MIN_STAKE);
+        _setKeyper(_depositor, true);
+
+        // first deposits min stake to avoid revert
+        _stake(_depositor, MIN_STAKE);
+
+        uint256 shares = staking.convertToShares(_amount);
+        uint256 stakeId = _stake(_depositor, _amount);
+
+        uint256 timestampBefore = vm.getBlockTimestamp();
+
+        _jumpAhead(_jump);
+
+        uint256 expectedRewards = REWARD_RATE *
+            (vm.getBlockTimestamp() - timestampBefore);
+        uint256 expectedBurnShares = _convertToSharesIncludeRewardsDistributed(
+            _amount + expectedRewards,
+            expectedRewards
+        );
+
+        vm.prank(_depositor);
+        vm.expectEmit();
+        emit Staking.UnstakedAndClaimedAllRewards(
+            _depositor,
+            _amount + expectedRewards,
+            expectedBurnShares
+        );
+        staking.unstakeAndClaimAllRewards(stakeId);
+    }
+
+    function testFuzz_UnstakeAndClaimAllRewardsBurnShares(
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount + MIN_STAKE);
+        _setKeyper(_depositor, true);
+
+        // first deposits min stake to avoid revert
+        _stake(_depositor, MIN_STAKE);
+
+        uint256 stakeId = _stake(_depositor, _amount);
+
+        uint256 sharesBefore = staking.balanceOf(_depositor);
+
+        uint256 timestampBefore = vm.getBlockTimestamp();
+
+        _jumpAhead(_jump);
+
+        uint256 expectedRewards = REWARD_RATE *
+            (vm.getBlockTimestamp() - timestampBefore);
+
+        uint256 expectedBurnShares = _convertToSharesIncludeRewardsDistributed(
+            _amount + expectedRewards,
+            expectedRewards
+        );
+        vm.prank(_depositor);
+        staking.unstakeAndClaimAllRewards(stakeId);
+
+        uint256 sharesAfter = staking.balanceOf(_depositor);
+
+        assertEq(
+            sharesBefore - sharesAfter,
+            expectedBurnShares,
+            "Wrong shares"
+        );
+    }
+
+    function testFuzz_UnstakeAndClaimAllRewardsDeleteStake(
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount + MIN_STAKE);
+        _setKeyper(_depositor, true);
+
+        // first deposits min stake to avoid revert
+        _stake(_depositor, MIN_STAKE);
+
+        uint256 stakeId = _stake(_depositor, _amount);
+
+        _jumpAhead(_jump);
+
+        vm.prank(_depositor);
+        staking.unstakeAndClaimAllRewards(stakeId);
+
+        uint256[] memory stakeIds = staking.getKeyperStakeIds(_depositor);
+        assertEq(stakeIds.length, 1, "Wrong stake ids");
+    }
+}
+
 contract OwnableFunctions is StakingTest {
     function testFuzz_setRewardsDistributor(
         address _newRewardsDistributor
@@ -1584,7 +1755,7 @@ contract ViewFunctions is StakingTest {
     function testFuzz_Revertif_MaxWithdrawDepositorHasNoStakes(
         address _depositor
     ) public {
-        vm.expectRevert(Staking.KeyperHasNoShares.selector);
+        vm.expectRevert(Staking.UserHasNoShares.selector);
         staking.maxWithdraw(_depositor);
     }
 

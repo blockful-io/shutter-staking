@@ -76,25 +76,23 @@ contract RewardsDistributor is Ownable2Step, IRewardsDistributor {
         // difference in time since last update
         uint256 timeDelta = block.timestamp - rewardConfiguration.lastUpdate;
 
-        // the contract must have funds to distribute
-        // we don't want to revert in case its zero to not block the staking contract
         uint256 funds = rewardToken.balanceOf(address(this));
 
-        if (
-            rewardConfiguration.emissionRate != 0 &&
-            timeDelta != 0 &&
-            funds != 0
-        ) {
-            rewards = rewardConfiguration.emissionRate * timeDelta;
+        rewards = rewardConfiguration.emissionRate * timeDelta;
 
-            // update the last update timestamp
-            rewardConfiguration.lastUpdate = block.timestamp;
-
-            // transfer the reward
-            rewardToken.safeTransfer(receiver, rewards);
-
-            emit RewardCollected(receiver, rewards);
+        // the contract must have enough funds to distribute
+        // we don't want to revert in case its zero to not block the staking contract
+        if (rewards == 0 || funds < rewards) {
+            return 0;
         }
+
+        // update the last update timestamp
+        rewardConfiguration.lastUpdate = block.timestamp;
+
+        // transfer the reward
+        rewardToken.safeTransfer(receiver, rewards);
+
+        emit RewardCollected(receiver, rewards);
     }
 
     /// @notice Add a reward configuration
