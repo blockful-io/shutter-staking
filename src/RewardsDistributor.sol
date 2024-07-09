@@ -66,7 +66,7 @@ contract RewardsDistributor is Ownable2Step, IRewardsDistributor {
     }
 
     /// @notice Distribute rewards to receiver
-    function collectRewards() external override returns (uint256) {
+    function collectRewards() external override returns (uint256 rewards) {
         address receiver = msg.sender;
 
         RewardConfiguration storage rewardConfiguration = rewardConfigurations[
@@ -78,7 +78,7 @@ contract RewardsDistributor is Ownable2Step, IRewardsDistributor {
 
         uint256 funds = rewardToken.balanceOf(address(this));
 
-        uint256 rewards = rewardConfiguration.emissionRate * timeDelta;
+        rewards = rewardConfiguration.emissionRate * timeDelta;
 
         // the contract must have enough funds to distribute
         // we don't want to revert in case its zero to not block the staking contract
@@ -93,8 +93,6 @@ contract RewardsDistributor is Ownable2Step, IRewardsDistributor {
         rewardToken.safeTransfer(receiver, rewards);
 
         emit RewardCollected(receiver, rewards);
-
-        return rewards;
     }
 
     /// @notice Add a reward configuration

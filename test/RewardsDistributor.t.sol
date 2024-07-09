@@ -249,10 +249,7 @@ contract CollectRewards is RewardsDistributorTest {
         uint256 jump = _jumpAhead(_jump);
         govToken.mint(address(rewardsDistributor), _emissionRate * jump);
 
-        uint256 timestampBefore = vm.getBlockTimestamp();
-
-        uint256 expectedRewards = _emissionRate *
-            (vm.getBlockTimestamp() - timestampBefore);
+        uint256 expectedRewards = _emissionRate * jump;
 
         vm.prank(_receiver);
         uint256 rewards = rewardsDistributor.collectRewards();
@@ -350,7 +347,6 @@ contract CollectRewards is RewardsDistributorTest {
         _emissionRate = bound(_emissionRate, 0.01e18, 1e18);
         rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
 
-        uint256 timestampBefore = vm.getBlockTimestamp();
         uint256 jump = _jumpAhead(_jump);
 
         deal(
