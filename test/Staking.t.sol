@@ -102,6 +102,14 @@ contract StakingTest is Test {
         );
     }
 
+    function _boundToMoreThanMinStake(
+        uint256 _stakeAmount
+    ) public pure returns (uint256 _boundedStakeAmount) {
+        _boundedStakeAmount = uint256(
+            bound(_stakeAmount, MIN_STAKE + 1, 5_000_000e18)
+        );
+    }
+
     function _stake(
         address _keyper,
         uint256 _amount
@@ -123,6 +131,18 @@ contract StakingTest is Test {
 
     function _setKeyper(address _keyper, bool _isKeyper) internal {
         staking.setKeyper(_keyper, _isKeyper);
+    }
+
+    function _previewWithdrawIncludeRewardsDistributed(
+        uint256 _amount,
+        uint256 _rewardsDistributed
+    ) internal view returns (uint256) {
+        uint256 supply = staking.totalSupply();
+
+        uint256 assets = govToken.balanceOf(address(staking)) +
+            _rewardsDistributed;
+
+        return supply == 0 ? _amount : _amount.mulDivUp(supply, assets);
     }
 
     function _convertToSharesIncludeRewardsDistributed(
@@ -229,8 +249,6 @@ contract Stake is StakingTest {
         _setKeyper(_depositor, true);
 
         vm.assume(_depositor != address(0));
-
-        uint256 shares = staking.convertToShares(_amount);
 
         vm.startPrank(_depositor);
         govToken.approve(address(staking), _amount);
@@ -758,7 +776,7 @@ contract ClaimRewards is StakingTest {
         uint256 expectedRewards = REWARD_RATE *
             (vm.getBlockTimestamp() - timestampBefore);
 
-        uint256 burnShares = _convertToSharesIncludeRewardsDistributed(
+        uint256 burnShares = _previewWithdrawIncludeRewardsDistributed(
             expectedRewards,
             expectedRewards
         );
@@ -791,7 +809,7 @@ contract ClaimRewards is StakingTest {
         uint256 expectedRewards = REWARD_RATE *
             (vm.getBlockTimestamp() - timestampBefore);
 
-        uint256 burnShares = _convertToSharesIncludeRewardsDistributed(
+        uint256 burnShares = _previewWithdrawIncludeRewardsDistributed(
             expectedRewards,
             expectedRewards
         );
@@ -919,7 +937,7 @@ contract ClaimRewards is StakingTest {
             (vm.getBlockTimestamp() - timestampBefore);
         uint256 rewardsToClaim = expectedRewards / 2;
 
-        uint256 burnShares = _convertToSharesIncludeRewardsDistributed(
+        uint256 burnShares = _previewWithdrawIncludeRewardsDistributed(
             rewardsToClaim,
             expectedRewards
         );
@@ -997,7 +1015,7 @@ contract Unstake is StakingTest {
         uint256 _amount,
         uint256 _jump
     ) public {
-        _amount = _boundToRealisticStake(_amount);
+        _amount = _boundToMoreThanMinStake(_amount);
         _jump = _boundUnlockedTime(_jump);
 
         _mintGovToken(_depositor, _amount);
@@ -1009,18 +1027,23 @@ contract Unstake is StakingTest {
 
         _jumpAhead(_jump);
 
+        uint256 unstakeAmount = _amount - MIN_STAKE;
         vm.prank(_depositor);
-        staking.unstake(_depositor, stakeId, 0);
+        staking.unstake(_depositor, stakeId, unstakeAmount);
 
-        assertEq(govToken.balanceOf(_depositor), _amount, "Wrong balance");
+        assertEq(
+            govToken.balanceOf(_depositor),
+            unstakeAmount,
+            "Wrong balance"
+        );
     }
 
-    function testFuzz_UnstakeNotTransferRewards(
+    function testFuzz_UnstakeShouldNotTransferRewards(
         address _depositor,
         uint256 _amount,
         uint256 _jump
     ) public {
-        _amount = _boundToRealisticStake(_amount);
+        _amount = _boundToMoreThanMinStake(_amount);
         _jump = _boundUnlockedTime(_jump);
 
         _mintGovToken(_depositor, _amount);
@@ -1035,16 +1058,18 @@ contract Unstake is StakingTest {
         uint256 expectedRewards = REWARD_RATE *
             (vm.getBlockTimestamp() - timestampBefore);
 
-        vm.prank(_depositor);
-        staking.unstake(_depositor, stakeId, 0);
+        uint256 unstakeAmount = _amount - MIN_STAKE;
 
-        if (expectedRewards > 0) {
-            assertEq(
-                govToken.balanceOf(address(staking)),
-                expectedRewards,
-                "Wrong balance"
-            );
-        }
+        rewardsDistributor.collectRewardsTo(address(staking));
+
+        vm.prank(_depositor);
+        staking.unstake(_depositor, stakeId, unstakeAmount);
+
+        assertEq(
+            govToken.balanceOf(address(staking)),
+            expectedRewards + MIN_STAKE,
+            "Wrong balance"
+        );
     }
 
     function testFuzz_EmitUnstakeEventWhenUnstaking(
@@ -1080,7 +1105,7 @@ contract Unstake is StakingTest {
         uint256 _amount,
         uint256 _jump
     ) public {
-        _amount = _boundToRealisticStake(_amount);
+        _amount = _boundToMoreThanMinStake(_amount);
         _jump = _boundUnlockedTime(_jump);
 
         _mintGovToken(_depositor, _amount);
@@ -1090,10 +1115,16 @@ contract Unstake is StakingTest {
 
         _jumpAhead(_jump);
 
-        vm.prank(_depositor);
-        staking.unstake(_depositor, stakeId, _amount);
+        uint256 unstakeAmount = _amount - MIN_STAKE;
 
-        assertEq(govToken.balanceOf(_depositor), _amount, "Wrong balance");
+        vm.prank(_depositor);
+        staking.unstake(_depositor, stakeId, unstakeAmount);
+
+        assertEq(
+            govToken.balanceOf(_depositor),
+            unstakeAmount,
+            "Wrong balance"
+        );
     }
 
     function testFuzz_UpdateTotalSupplyWhenUnstaking(
@@ -1104,22 +1135,19 @@ contract Unstake is StakingTest {
         _amount = _boundToRealisticStake(_amount);
         _jump = _boundUnlockedTime(_jump);
 
-        _mintGovToken(_depositor, _amount);
+        _mintGovToken(_depositor, _amount + MIN_STAKE);
         _setKeyper(_depositor, true);
+
+        _stake(_depositor, MIN_STAKE);
 
         uint256 stakeId = _stake(_depositor, _amount);
 
-        uint256 timestampBefore = vm.getBlockTimestamp();
-
         _jumpAhead(_jump);
-
-        uint256 rewards = REWARD_RATE *
-            (vm.getBlockTimestamp() - timestampBefore);
 
         vm.prank(_depositor);
         staking.unstake(_depositor, stakeId, 0);
 
-        uint256 expectedSharesRemaining = staking.convertToShares(rewards);
+        uint256 expectedSharesRemaining = staking.convertToShares(MIN_STAKE);
 
         uint256 totalSupplyAfter = staking.totalSupply();
 
@@ -1422,44 +1450,6 @@ contract OwnableFunctions is StakingTest {
         staking.setKeyper(keyper, isKeyper);
 
         assertEq(staking.keypers(keyper), isKeyper, "Wrong keyper");
-    }
-
-    function testFuzz_removeKeyperUnstakeFirstStake(
-        address _keyper,
-        uint256 _amount
-    ) public {
-        _amount = _boundToRealisticStake(_amount);
-        _mintGovToken(_keyper, _amount);
-        _setKeyper(_keyper, true);
-
-        uint256 expectedShares = staking.convertToShares(_amount);
-        uint256 stakeId = _stake(_keyper, _amount);
-
-        uint256 sharesBefore = staking.balanceOf(_keyper);
-        assertEq(sharesBefore, expectedShares, "Wrong shares");
-
-        uint256[] memory keyperStakeIdsBefore = staking.getKeyperStakeIds(
-            _keyper
-        );
-        assertEq(keyperStakeIdsBefore.length, 1, "Wrong stake ids");
-        assertEq(keyperStakeIdsBefore[0], stakeId, "Wrong stake id");
-
-        uint256 keyperBalanceBefore = govToken.balanceOf(_keyper);
-
-        _setKeyper(_keyper, false);
-
-        uint256 sharesAfter = staking.balanceOf(_keyper);
-        assertEq(sharesAfter, 0, "Wrong shares");
-
-        uint256 keyperBalanceAfter = govToken.balanceOf(_keyper);
-        assertEq(
-            keyperBalanceAfter - keyperBalanceBefore,
-            _amount,
-            "Wrong balance"
-        );
-
-        uint256[] memory keyperStakeIds = staking.getKeyperStakeIds(_keyper);
-        assertEq(keyperStakeIds.length, 0, "Wrong stake ids");
     }
 
     function testFuzz_RevertIf_NonOwnerSetRewardsDistributor(

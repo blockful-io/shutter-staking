@@ -8,6 +8,7 @@ import {Staking} from "src/Staking.sol";
 import {MockGovToken} from "test/mocks/MockGovToken.sol";
 import "./Constants.sol";
 
+// forge script script/testnet/DeployTestnet.s.sol --rpc-url testnet -vvvvv --slow --always-use-create-2-factory --account test
 contract DeployTestnet is Script {
     function run()
         public

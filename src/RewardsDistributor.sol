@@ -56,6 +56,15 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
     /// @notice Thrown when address is zero
     error ZeroAddress();
 
+    /// @notice Thrown when emission rate is zero
+    error EmissionRateZero();
+
+    /// @notice Thrown when the contract doesn't have enough funds
+    error NotEnoughFunds();
+
+    /// @notice Thrown when the time delta is zero
+    error TimeDeltaZero();
+
     /// @notice Initialize the contract
     /// @param _owner The owner of the contract, i.e. the DAO contract address
     /// @param _rewardToken The reward token, i.e. SHU
@@ -65,6 +74,7 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
     }
 
     /// @notice Distribute rewards to receiver
+    /// Caller must be the receiver
     function collectRewards() external override returns (uint256 rewards) {
         address receiver = msg.sender;
 
@@ -94,6 +104,38 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
         emit RewardCollected(receiver, rewards);
     }
 
+    /// @notice Send rewards to receiver
+    /// @param receiver The receiver of the rewards
+    function collectRewardsTo(
+        address receiver
+    ) external override returns (uint256 rewards) {
+        RewardConfiguration storage rewardConfiguration = rewardConfigurations[
+            receiver
+        ];
+
+        require(rewardConfiguration.emissionRate > 0, EmissionRateZero());
+
+        // difference in time since last update
+        uint256 timeDelta = block.timestamp - rewardConfiguration.lastUpdate;
+
+        require(timeDelta > 0, TimeDeltaZero());
+
+        uint256 funds = rewardToken.balanceOf(address(this));
+
+        rewards = rewardConfiguration.emissionRate * timeDelta;
+
+        // the contract must have enough funds to distribute
+        require(funds >= rewards, NotEnoughFunds());
+
+        // update the last update timestamp
+        rewardConfiguration.lastUpdate = block.timestamp;
+
+        // transfer the reward
+        rewardToken.safeTransfer(receiver, rewards);
+
+        emit RewardCollected(receiver, rewards);
+    }
+
     /// @notice Add a reward configuration
     /// @param receiver The receiver of the rewards
     /// @param emissionRate The emission rate
@@ -103,6 +145,9 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
     ) external override onlyOwner {
         require(receiver != address(0), ZeroAddress());
 
+        // to remove a rewards, it should call removeRewardConfiguration
+        require(emissionRate > 0, EmissionRateZero());
+
         // only update last update if it's the first time
         if (rewardConfigurations[receiver].lastUpdate == 0) {
             rewardConfigurations[receiver].lastUpdate = block.timestamp;
@@ -110,6 +155,14 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
         rewardConfigurations[receiver].emissionRate = emissionRate;
 
         emit RewardConfigurationSet(receiver, emissionRate);
+    }
+
+    /// @notice Remove a reward configuration
+    /// @param receiver The receiver of the rewards
+    function removeRewardConfiguration(address receiver) external onlyOwner {
+        delete rewardConfigurations[receiver];
+
+        emit RewardConfigurationSet(receiver, 0);
     }
 
     /// @notice Withdraw funds from the contract
