@@ -1077,7 +1077,7 @@ contract Unstake is StakingTest {
         uint256 _amount,
         uint256 _jump
     ) public {
-        _amount = _boundToRealisticStake(_amount);
+        _amount = _boundToMoreThanMinStake(_amount);
         _jump = _boundUnlockedTime(_jump);
 
         _mintGovToken(_depositor, _amount);
@@ -1085,19 +1085,15 @@ contract Unstake is StakingTest {
 
         uint256 stakeId = _stake(_depositor, _amount);
 
-        uint256 timestampBefore = vm.getBlockTimestamp();
-
         _jumpAhead(_jump);
 
-        uint256 shares = _convertToSharesIncludeRewardsDistributed(
-            _amount,
-            REWARD_RATE * (vm.getBlockTimestamp() - timestampBefore)
-        );
+        uint256 unstakeAmount = _amount - MIN_STAKE;
+        uint256 shares = staking.previewWithdraw(unstakeAmount);
         vm.expectEmit();
-        emit Staking.Unstaked(_depositor, _amount, shares);
+        emit Staking.Unstaked(_depositor, unstakeAmount, shares);
 
         vm.prank(_depositor);
-        staking.unstake(_depositor, stakeId, 0);
+        staking.unstake(_depositor, stakeId, unstakeAmount);
     }
 
     function testFuzz_UnstakeSpecifiedAmount(
@@ -1181,11 +1177,12 @@ contract Unstake is StakingTest {
         uint256 stakeId = _stake(_depositor, _amount);
         assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
 
-        // setKeyper to false will remove the first stake
         _setKeyper(_depositor, false);
 
-        vm.prank(_anyone);
+        vm.startPrank(_anyone);
         staking.unstake(_depositor, stakeId, 0);
+        staking.unstake(_depositor, stakeId, 1);
+        vm.stopPrank();
 
         assertEq(govToken.balanceOf(_depositor), _amount * 2, "Wrong balance");
 
@@ -1199,7 +1196,7 @@ contract Unstake is StakingTest {
         uint256 _amount2,
         uint256 _jump
     ) public {
-        _amount1 = _boundToRealisticStake(_amount1);
+        _amount1 = _boundToMoreThanMinStake(_amount1);
         _amount2 = _boundToRealisticStake(_amount2);
         _jump = _boundUnlockedTime(_jump);
 
@@ -1213,16 +1210,21 @@ contract Unstake is StakingTest {
         _jumpAhead(_jump);
 
         vm.prank(_depositor);
-        staking.unstake(_depositor, stakeId1, 0);
+        uint256 unstakeAmount = _amount1 - MIN_STAKE;
+        staking.unstake(_depositor, stakeId1, unstakeAmount);
 
-        assertEq(govToken.balanceOf(_depositor), _amount1, "Wrong balance");
+        assertEq(
+            govToken.balanceOf(_depositor),
+            unstakeAmount,
+            "Wrong balance"
+        );
 
         vm.prank(_depositor);
         staking.unstake(_depositor, stakeId2, 0);
 
         assertEq(
             govToken.balanceOf(_depositor),
-            _amount1 + _amount2,
+            unstakeAmount + _amount2,
             "Wrong balance"
         );
     }
@@ -1233,11 +1235,11 @@ contract Unstake is StakingTest {
         uint256 _amount2,
         uint256 _jump
     ) public {
-        _amount1 = _boundToRealisticStake(_amount1);
+        _amount1 = _boundToMoreThanMinStake(_amount1);
         _amount2 = _boundToRealisticStake(_amount2);
         _jump = _boundUnlockedTime(_jump);
 
-        vm.assume(_amount1 > _amount2);
+        vm.assume(_amount1 > _amount2 && _amount1 - _amount2 > MIN_STAKE);
         _jump = _boundUnlockedTime(_jump);
 
         _mintGovToken(_depositor, _amount1);
