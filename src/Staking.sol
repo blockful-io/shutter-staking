@@ -2,11 +2,12 @@
 pragma solidity 0.8.26;
 
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
-import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
+
+import {IERC20} from "./interfaces/IERC20.sol";
+import {SafeTransferLib} from "./libraries/SafeTransferLib.sol";
+import {FixedPointMathLib} from "./libraries/FixedPointMathLib.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
 /// @notice Shutter Staking Contract
@@ -16,6 +17,10 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
     using EnumerableSet for EnumerableSet.UintSet;
+
+    using SafeTransferLib for IERC20;
+
+    using FixedPointMathLib for uint256;
 
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
@@ -84,6 +89,15 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
 
     /// @notice Emitted when a keyper is added or removed
     event KeyperSet(address indexed keyper, bool isKeyper);
+
+    /// @notice Emitted when the lock period is changed
+    event NewLockPeriod(uint256 indexed lockPeriod);
+
+    /// @notice Emitted when the minimum stake is changed
+    event NewMinStake(uint256 indexed minStake);
+
+    /// @notice Emitted when the rewards distributor is changed
+    event NewRewardsDistributor(address indexed rewardsDistributor);
 
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
@@ -218,7 +232,7 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
         stakesIds.add(stakeId);
 
         // Lock the SHU in the contract
-        SafeERC20.safeTransferFrom(stakingToken, keyper, address(this), amount);
+        stakingToken.safeTransferFrom(keyper, address(this), amount);
 
         emit Staked(keyper, amount, lockPeriod);
     }
@@ -282,7 +296,7 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
 
             // The unstake can't never result in a keyper SHU staked < minStake
             require(
-                maxWithdraw(keyper, keyperStake.amount) >= amount,
+                _maxWithdraw(keyper, keyperStake.amount) >= amount,
                 WithdrawAmountTooHigh()
             );
         } else {
@@ -293,7 +307,31 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
             );
         }
 
-        _unstake(keyper, stakeId, amount);
+        // Calculates the amounf of shares to burn
+        uint256 shares = previewWithdraw(amount);
+
+        // Burn the shares
+        _burn(keyper, shares);
+
+        // Decrease the amount from the stake
+        stakes[stakeId].amount -= amount;
+
+        // Decrease the amount from the total locked
+        totalLocked[keyper] -= amount;
+
+        // If the stake is empty, remove it
+        if (stakes[stakeId].amount == 0) {
+            // Remove the stake from the stakes mapping
+            delete stakes[stakeId];
+
+            // Remove the stake from the keyper stakes
+            keyperStakes[keyper].remove(stakeId);
+        }
+
+        // Transfer the SHU to the keyper
+        stakingToken.safeTransfer(keyper, amount);
+
+        emit Unstaked(keyper, amount, shares);
     }
 
     /// @notice Claim rewards
@@ -320,11 +358,11 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
         require(rewards > 0, NoRewardsToClaim());
 
         // Calculates the amount of shares to burn
-        uint256 shares = convertToShares(rewards);
+        uint256 shares = previewWithdraw(rewards);
 
         _burn(keyper, shares);
 
-        SafeERC20.safeTransfer(stakingToken, keyper, rewards);
+        stakingToken.safeTransfer(keyper, rewards);
 
         emit RewardsClaimed(keyper, rewards);
     }
@@ -340,18 +378,24 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
     ) external onlyOwner {
         require(_rewardsDistributor != address(0), AddressZero());
         rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
+
+        emit NewRewardsDistributor(_rewardsDistributor);
     }
 
     /// @notice Set the lock period
     /// @param _lockPeriod The lock period in seconds
     function setLockPeriod(uint256 _lockPeriod) external onlyOwner {
         lockPeriod = _lockPeriod;
+
+        emit NewLockPeriod(_lockPeriod);
     }
 
     /// @notice Set the minimum stake amount
     /// @param _minStake The minimum stake amount
     function setMinStake(uint256 _minStake) external onlyOwner {
         minStake = _minStake;
+
+        emit NewMinStake(_minStake);
     }
 
     /// @notice Set a keyper
@@ -360,7 +404,8 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
     /// @param keyper The keyper address
     /// @param isKeyper Whether the keyper is a keyper or not
     function setKeyper(address keyper, bool isKeyper) external onlyOwner {
-        _setKeyper(keyper, isKeyper);
+        keypers[keyper] = isKeyper;
+        emit KeyperSet(keyper, isKeyper);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -385,16 +430,6 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
                               VIEW FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
-    /// @notice Get the maximum amount of assets that a keyper can withdraw
-    ////         - if the keyper has no shares, the function will revert
-    ///          - if the keyper sSHU balance is less or equal than the minimum stake or the total
-    ///            locked amount, the function will return 0
-    /// @param keyper The keyper address
-    /// @return amount The maximum amount of assets that a keyper can withdraw
-    function maxWithdraw(address keyper) public view virtual returns (uint256) {
-        return maxWithdraw(keyper, 0);
-    }
-
     /// @notice Get the stake ids belonging to a keyper
     function getKeyperStakeIds(
         address keyper
@@ -402,9 +437,47 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
         return keyperStakes[keyper].values();
     }
 
+    function previewWithdraw(
+        uint256 assets
+    ) public view virtual returns (uint256) {
+        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? assets : assets.mulDivUp(supply, _totalAssets());
+    }
+
+    /// @notice Get the total amount of shares the assets are worth
+    /// @param assets The amount of assets
+    function convertToShares(
+        uint256 assets
+    ) public view virtual returns (uint256) {
+        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? assets : assets.mulDivDown(supply, _totalAssets());
+    }
+
+    /// @notice Get the total amount of assets the shares are worth
+    /// @param shares The amount of shares
+    function convertToAssets(
+        uint256 shares
+    ) public view virtual returns (uint256) {
+        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? shares : shares.mulDivDown(_totalAssets(), supply);
+    }
+
     /*//////////////////////////////////////////////////////////////
                           INTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
+
+    /// @notice Get the maximum amount of assets that a keyper can withdraw
+    ////         - if the keyper has no shares, the function will revert
+    ///          - if the keyper sSHU balance is less or equal than the minimum stake or the total
+    ///            locked amount, the function will return 0
+    /// @param keyper The keyper address
+    /// @return amount The maximum amount of assets that a keyper can withdraw
+    function maxWithdraw(address keyper) public view virtual returns (uint256) {
+        return _maxWithdraw(keyper, 0);
+    }
 
     /// @notice Get the maximum amount of assets that a keyper can withdraw
     ///         after unlocking a certain amount
@@ -414,7 +487,7 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
     /// @param keyper The keyper address
     /// @param unlockedAmount The amount of assets to unlock
     /// @return amount The maximum amount of assets that a keyper can withdraw after unlocking a certain amount
-    function maxWithdraw(
+    function _maxWithdraw(
         address keyper,
         uint256 unlockedAmount
     ) internal view virtual returns (uint256 amount) {
@@ -430,73 +503,16 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
         amount = compare >= assets ? 0 : assets - compare;
     }
 
-    /// @notice Get the total amount of shares the assets are worth
-    /// @param assets The amount of assets
-    function convertToShares(
-        uint256 assets
-    ) internal view virtual returns (uint256) {
-        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return
-            supply == 0
-                ? assets
-                : FixedPointMathLib.mulDivDown(assets, supply, totalAssets());
-    }
-
-    /// @notice Get the total amount of assets the shares are worth
-    /// @param shares The amount of shares
-    function convertToAssets(
-        uint256 shares
-    ) internal view virtual returns (uint256) {
-        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return
-            supply == 0
-                ? shares
-                : FixedPointMathLib.mulDivDown(shares, totalAssets(), supply);
-    }
-
     /// @notice Get the amount of SHU staked for all keypers
-    function totalAssets() internal view virtual returns (uint256) {
+    function _totalAssets() internal view virtual returns (uint256) {
         return stakingToken.balanceOf(address(this));
-    }
-
-    function _setKeyper(address keyper, bool isKeyper) internal {
-        keypers[keyper] = isKeyper;
-        emit KeyperSet(keyper, isKeyper);
     }
 
     function _unstake(
         address keyper,
         uint256 stakeId,
         uint256 amount
-    ) internal {
-        // Calculates the amounf of shares to burn
-        uint256 shares = convertToShares(amount);
-
-        // Burn the shares
-        _burn(keyper, shares);
-
-        // Decrease the amount from the stake
-        stakes[stakeId].amount -= amount;
-
-        // Decrease the amount from the total locked
-        totalLocked[keyper] -= amount;
-
-        // If the stake is empty, remove it
-        if (stakes[stakeId].amount == 0) {
-            // Remove the stake from the stakes mapping
-            delete stakes[stakeId];
-
-            // Remove the stake from the keyper stakes
-            keyperStakes[keyper].remove(stakeId);
-        }
-
-        // Transfer the SHU to the keyper
-        SafeERC20.safeTransfer(stakingToken, keyper, amount);
-
-        emit Unstaked(keyper, amount, shares);
-    }
+    ) internal {}
 
     function _calculateWithdrawAmount(
         uint256 _amount,

@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
+import {SafeTransferLib} from "./libraries/SafeTransferLib.sol";
+import {IERC20} from "./interfaces/IERC20.sol";
 
-contract RewardsDistributor is Ownable2Step, IRewardsDistributor {
+contract RewardsDistributor is Ownable, IRewardsDistributor {
     /*//////////////////////////////////////////////////////////////
                                  LIBRARIES
     //////////////////////////////////////////////////////////////*/
-    using SafeERC20 for IERC20;
+    using SafeTransferLib for IERC20;
 
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
@@ -58,9 +57,9 @@ contract RewardsDistributor is Ownable2Step, IRewardsDistributor {
     error ZeroAddress();
 
     /// @notice Initialize the contract
-    /// @param newOwner The owner of the contract, i.e. the DAO contract address
+    /// @param _owner The owner of the contract, i.e. the DAO contract address
     /// @param _rewardToken The reward token, i.e. SHU
-    constructor(address newOwner, address _rewardToken) Ownable(newOwner) {
+    constructor(address _owner, address _rewardToken) Ownable(_owner) {
         // Set the reward token
         rewardToken = IERC20(_rewardToken);
     }

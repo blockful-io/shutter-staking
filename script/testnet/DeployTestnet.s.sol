@@ -22,10 +22,11 @@ contract DeployTestnet is Script {
             address(govToken)
         );
 
+        Staking stake = new Staking();
         stakingProxy = Staking(
             address(
                 new TransparentUpgradeableProxy(
-                    address(new Staking()),
+                    address(stake),
                     address(CONTRACT_OWNER),
                     ""
                 )

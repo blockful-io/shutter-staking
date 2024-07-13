@@ -131,7 +131,8 @@ contract StakingTest is Test {
     ) internal view returns (uint256) {
         uint256 supply = staking.totalSupply();
 
-        uint256 assets = staking.totalAssets() + _rewardsDistributed;
+        uint256 assets = govToken.balanceOf(address(staking)) +
+            _rewardsDistributed;
 
         return supply == 0 ? _amount : _amount.mulDivDown(supply, assets);
     }
@@ -195,6 +196,7 @@ contract Stake is StakingTest {
         vm.stopPrank();
     }
 
+    // TODO
     function testFuzz_IncreaseNextStakeId(
         address _depositor,
         uint256 _amount
@@ -233,7 +235,7 @@ contract Stake is StakingTest {
         vm.startPrank(_depositor);
         govToken.approve(address(staking), _amount);
         vm.expectEmit();
-        emit Staking.Staked(_depositor, _amount, shares, LOCK_PERIOD);
+        emit Staking.Staked(_depositor, _amount, LOCK_PERIOD);
 
         staking.stake(_amount);
         vm.stopPrank();
@@ -1377,177 +1379,6 @@ contract Unstake is StakingTest {
     }
 }
 
-contract UnstakeAndClaimRewards is StakingTest {
-    function testFuzz_UpdateStakerGovTokenBalanceWhenUnstakingAndCollectingRewards(
-        address _depositor,
-        uint256 _amount,
-        uint256 _jump
-    ) public {
-        _amount = _boundToRealisticStake(_amount);
-        _jump = _boundUnlockedTime(_jump);
-
-        _mintGovToken(_depositor, _amount + MIN_STAKE);
-        _setKeyper(_depositor, true);
-
-        // first deposits min stake to avoid revert
-        _stake(_depositor, MIN_STAKE);
-
-        uint256 stakeId = _stake(_depositor, _amount);
-
-        assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
-
-        uint256 timestampBefore = vm.getBlockTimestamp();
-
-        _jumpAhead(_jump);
-
-        uint256 expectedRewards = REWARD_RATE *
-            (vm.getBlockTimestamp() - timestampBefore);
-
-        vm.prank(_depositor);
-        staking.unstakeAndClaimAllRewards(stakeId);
-
-        assertEq(
-            govToken.balanceOf(_depositor),
-            _amount + expectedRewards,
-            "Wrong balance"
-        );
-    }
-
-    function testFuzz_GovTokenBalanceUnchangedWhenUnstakingAndCollectingRewardsOnlyStaker(
-        address _depositor,
-        uint256 _amount,
-        uint256 _jump
-    ) public {
-        _amount = _boundToRealisticStake(_amount);
-        _jump = _boundUnlockedTime(_jump);
-
-        _mintGovToken(_depositor, _amount + MIN_STAKE);
-        _setKeyper(_depositor, true);
-
-        // first deposits min stake to avoid revert
-        _stake(_depositor, MIN_STAKE);
-
-        uint256 stakeId = _stake(_depositor, _amount);
-
-        uint256 timestampBefore = vm.getBlockTimestamp();
-
-        _jumpAhead(_jump);
-
-        vm.prank(_depositor);
-        staking.unstakeAndClaimAllRewards(stakeId);
-
-        assertEq(
-            govToken.balanceOf(address(staking)),
-            MIN_STAKE,
-            "Wrong balance"
-        );
-    }
-
-    function testFuzz_EmitRewardsClaimedEventWhenClaimingRewards(
-        address _depositor,
-        uint256 _amount,
-        uint256 _jump
-    ) public {
-        _amount = _boundToRealisticStake(_amount);
-        _jump = _boundUnlockedTime(_jump);
-
-        _mintGovToken(_depositor, _amount + MIN_STAKE);
-        _setKeyper(_depositor, true);
-
-        // first deposits min stake to avoid revert
-        _stake(_depositor, MIN_STAKE);
-
-        uint256 shares = staking.convertToShares(_amount);
-        uint256 stakeId = _stake(_depositor, _amount);
-
-        uint256 timestampBefore = vm.getBlockTimestamp();
-
-        _jumpAhead(_jump);
-
-        uint256 expectedRewards = REWARD_RATE *
-            (vm.getBlockTimestamp() - timestampBefore);
-        uint256 expectedBurnShares = _convertToSharesIncludeRewardsDistributed(
-            _amount + expectedRewards,
-            expectedRewards
-        );
-
-        vm.prank(_depositor);
-        vm.expectEmit();
-        emit Staking.UnstakedAndClaimedAllRewards(
-            _depositor,
-            _amount + expectedRewards,
-            expectedBurnShares
-        );
-        staking.unstakeAndClaimAllRewards(stakeId);
-    }
-
-    function testFuzz_UnstakeAndClaimAllRewardsBurnShares(
-        address _depositor,
-        uint256 _amount,
-        uint256 _jump
-    ) public {
-        _amount = _boundToRealisticStake(_amount);
-        _jump = _boundUnlockedTime(_jump);
-
-        _mintGovToken(_depositor, _amount + MIN_STAKE);
-        _setKeyper(_depositor, true);
-
-        // first deposits min stake to avoid revert
-        _stake(_depositor, MIN_STAKE);
-
-        uint256 stakeId = _stake(_depositor, _amount);
-
-        uint256 sharesBefore = staking.balanceOf(_depositor);
-
-        uint256 timestampBefore = vm.getBlockTimestamp();
-
-        _jumpAhead(_jump);
-
-        uint256 expectedRewards = REWARD_RATE *
-            (vm.getBlockTimestamp() - timestampBefore);
-
-        uint256 expectedBurnShares = _convertToSharesIncludeRewardsDistributed(
-            _amount + expectedRewards,
-            expectedRewards
-        );
-        vm.prank(_depositor);
-        staking.unstakeAndClaimAllRewards(stakeId);
-
-        uint256 sharesAfter = staking.balanceOf(_depositor);
-
-        assertEq(
-            sharesBefore - sharesAfter,
-            expectedBurnShares,
-            "Wrong shares"
-        );
-    }
-
-    function testFuzz_UnstakeAndClaimAllRewardsDeleteStake(
-        address _depositor,
-        uint256 _amount,
-        uint256 _jump
-    ) public {
-        _amount = _boundToRealisticStake(_amount);
-        _jump = _boundUnlockedTime(_jump);
-
-        _mintGovToken(_depositor, _amount + MIN_STAKE);
-        _setKeyper(_depositor, true);
-
-        // first deposits min stake to avoid revert
-        _stake(_depositor, MIN_STAKE);
-
-        uint256 stakeId = _stake(_depositor, _amount);
-
-        _jumpAhead(_jump);
-
-        vm.prank(_depositor);
-        staking.unstakeAndClaimAllRewards(stakeId);
-
-        uint256[] memory stakeIds = staking.getKeyperStakeIds(_depositor);
-        assertEq(stakeIds.length, 1, "Wrong stake ids");
-    }
-}
-
 contract OwnableFunctions is StakingTest {
     function testFuzz_setRewardsDistributor(
         address _newRewardsDistributor
@@ -1591,17 +1422,6 @@ contract OwnableFunctions is StakingTest {
         staking.setKeyper(keyper, isKeyper);
 
         assertEq(staking.keypers(keyper), isKeyper, "Wrong keyper");
-    }
-
-    function testFuzz_setKeypers(
-        address[] memory keypers,
-        bool isKeyper
-    ) public {
-        staking.setKeypers(keypers, isKeyper);
-
-        for (uint256 i = 0; i < keypers.length; i++) {
-            assertEq(staking.keypers(keypers[i]), isKeyper, "Wrong keyper");
-        }
     }
 
     function testFuzz_removeKeyperUnstakeFirstStake(
@@ -1728,27 +1548,6 @@ contract OwnableFunctions is StakingTest {
         );
         staking.setKeyper(keyper, isKeyper);
     }
-
-    function testFuzz_RevertIf_NonOwnerSetKeypers(
-        address[] memory keypers,
-        bool isKeyper,
-        address _nonOwner
-    ) public {
-        vm.assume(
-            _nonOwner != address(0) &&
-                _nonOwner != ProxyUtils.getAdminAddress(address(staking)) &&
-                _nonOwner != address(this)
-        );
-
-        vm.prank(_nonOwner);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                Ownable.OwnableUnauthorizedAccount.selector,
-                _nonOwner
-            )
-        );
-        staking.setKeypers(keypers, isKeyper);
-    }
 }
 
 contract ViewFunctions is StakingTest {
@@ -1867,16 +1666,6 @@ contract ViewFunctions is StakingTest {
         uint256 assets = staking.convertToAssets(shares);
 
         assertEq(assets, _assets, "Wrong assets");
-    }
-
-    function testFuzz_TotalAssets(uint256 _donation) public {
-        _donation = _boundToRealisticStake(_donation);
-
-        _mintGovToken(address(this), _donation);
-
-        govToken.transfer(address(staking), _donation);
-
-        assertEq(staking.totalAssets(), _donation, "Wrong total assets");
     }
 
     function testFuzz_GetKeyperStakeIds(
