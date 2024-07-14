@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {console} from "@forge-std/console.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
@@ -26,9 +25,6 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
     //////////////////////////////////////////////////////////////*/
-
-    /// @notice Minimum non-zero shares amount to prevent donation attack
-    uint256 private constant MIN_SHARES = 1e18;
 
     /// @notice the staking token, i.e. SHU
     /// @dev set in initialize, can't be changed
@@ -466,10 +462,6 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
         return shares.mulDivDown(_totalAssets() + 1, totalSupply() + 1);
     }
 
-    /*//////////////////////////////////////////////////////////////
-                          INTERNAL FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
-
     /// @notice Get the maximum amount of assets that a keyper can withdraw
     ////         - if the keyper has no shares, the function will revert
     ///          - if the keyper sSHU balance is less or equal than the minimum stake or the total
@@ -479,6 +471,10 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
     function maxWithdraw(address keyper) public view virtual returns (uint256) {
         return _maxWithdraw(keyper, 0);
     }
+
+    /*//////////////////////////////////////////////////////////////
+                          INTERNAL FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Get the maximum amount of assets that a keyper can withdraw
     ///         after unlocking a certain amount
@@ -496,15 +492,12 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
         require(shares > 0, UserHasNoShares());
 
         uint256 assets = convertToAssets(shares);
-        console.log("assets", assets);
 
         uint256 locked = totalLocked[keyper] - unlockedAmount;
         uint256 compare = locked >= minStake ? locked : minStake;
-        console.log("compare", compare);
 
         // need the first branch as convertToAssets rounds down
         amount = compare >= assets ? 0 : assets - compare;
-        console.log("amount", amount);
     }
 
     /// @notice Get the amount of SHU staked for all keypers
@@ -512,6 +505,9 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
         return stakingToken.balanceOf(address(this));
     }
 
+    /// @notice Calculates the amount to withdraw
+    /// @param _amount The amount to withdraw
+    /// @param maxWithdrawAmount The maximum amount that can be withdrawn
     function _calculateWithdrawAmount(
         uint256 _amount,
         uint256 maxWithdrawAmount
@@ -523,9 +519,5 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
             require(_amount <= maxWithdrawAmount, WithdrawAmountTooHigh());
             amount = _amount;
         }
-    }
-
-    function _decimalsOffset() internal view virtual returns (uint8) {
-        return 0;
     }
 }
