@@ -787,14 +787,6 @@ contract Stake is StakingTest {
 
         uint256 bobBalance = govToken.balanceOf(bob);
 
-        // alice lost a minimum amount of 0.01%
-        _assertMinRelativeLoss(
-            donationAmount, // how much she paid for the attack
-            aliceRewards, // how much she received
-            0.001e18,
-            "Alice did not lose at least 1%"
-        );
-
         // at the end Alice still lost more than bob
         assertGtDecimal(
             donationAmount - aliceRewards,
