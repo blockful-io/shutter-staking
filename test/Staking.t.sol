@@ -734,6 +734,7 @@ contract Stake is StakingTest {
         address alice,
         uint256 attackSize
     ) public {
+        vm.assume(bob != alice && bob != address(0));
         rewardsDistributor.removeRewardConfiguration(address(staking));
 
         attackSize = bound(attackSize, 2, 1000);
