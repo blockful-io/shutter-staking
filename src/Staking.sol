@@ -2,22 +2,25 @@
 pragma solidity 0.8.26;
 
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {Ownable2StepUpgradeable} from "@openzeppelin-upgradeable/contracts/access/Ownable2StepUpgradeable.sol";
+import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
-import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
+
+import {IERC20} from "./interfaces/IERC20.sol";
+import {SafeTransferLib} from "./libraries/SafeTransferLib.sol";
+import {FixedPointMathLib} from "./libraries/FixedPointMathLib.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
 /// @notice Shutter Staking Contract
 ///         Allows keypers to stake SHU for a lock period and earn rewards in exchange
-contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
+contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
-    using SafeERC20 for IERC20;
-    using FixedPointMathLib for uint256;
     using EnumerableSet for EnumerableSet.UintSet;
+
+    using SafeTransferLib for IERC20;
+
+    using FixedPointMathLib for uint256;
 
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
@@ -76,32 +79,16 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Emitted when a keyper stakes SHU
-    event Staked(
-        address indexed user,
-        uint256 indexed amount,
-        uint256 indexed shares,
-        uint256 lockPeriod
-    );
+    event Staked(address indexed user, uint256 amount, uint256 lockPeriod);
 
     /// @notice Emitted when a keyper unstakes SHU
-    event Unstaked(
-        address indexed user,
-        uint256 indexed amount,
-        uint256 shares
-    );
-
-    /// @notice Emitted when a keyepr unstakes and claims all rewards
-    event UnstakedAndClaimedAllRewards(
-        address indexed user,
-        uint256 indexed amount,
-        uint256 shares
-    );
+    event Unstaked(address indexed user, uint256 amount, uint256 shares);
 
     /// @notice Emitted when a keyper claims rewards
-    event RewardsClaimed(address indexed user, uint256 indexed rewards);
+    event RewardsClaimed(address indexed user, uint256 rewards);
 
     /// @notice Emitted when a keyper is added or removed
-    event KeyperSet(address indexed keyper, bool indexed isKeyper);
+    event KeyperSet(address indexed keyper, bool isKeyper);
 
     /// @notice Emitted when the lock period is changed
     event NewLockPeriod(uint256 indexed lockPeriod);
@@ -230,20 +217,16 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Update the keyper's SHU balance
         totalLocked[keyper] += amount;
 
-        uint256 sharesToMint = convertToShares(amount);
-
         // Mint the shares
-        _mint(keyper, sharesToMint);
+        _mint(keyper, convertToShares(amount));
 
         // Get next stake id and increment it
         stakeId = nextStakeId++;
 
         // Add the stake to the stakes mapping
-        stakes[stakeId] = Stake({
-            amount: amount,
-            timestamp: block.timestamp,
-            lockPeriod: lockPeriod
-        });
+        stakes[stakeId].amount = amount;
+        stakes[stakeId].timestamp = block.timestamp;
+        stakes[stakeId].lockPeriod = lockPeriod;
 
         // Add the stake to the keyper stakes
         stakesIds.add(stakeId);
@@ -251,7 +234,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Lock the SHU in the contract
         stakingToken.safeTransferFrom(keyper, address(this), amount);
 
-        emit Staked(keyper, amount, sharesToMint, lockPeriod);
+        emit Staked(keyper, amount, lockPeriod);
     }
 
     /// @notice Unstake SHU
@@ -279,7 +262,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         address keyper,
         uint256 stakeId,
         uint256 _amount
-    ) external updateRewards returns (uint256 amount) {
+    ) external returns (uint256 amount) {
         require(
             keyperStakes[keyper].contains(stakeId),
             StakeDoesNotBelongToKeyper()
@@ -288,16 +271,7 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
         require(keyperStake.amount > 0, StakeDoesNotExist());
 
-        // If caller doesn't specify the amount, the contract will transfer the
-        // stake amount for the stakeId
-        if (_amount == 0) {
-            amount = keyperStake.amount;
-        } else {
-            // if amount is specified, it must be less than the stake amount
-            require(_amount <= keyperStake.amount, WithdrawAmountTooHigh());
-
-            amount = _amount;
-        }
+        amount = _calculateWithdrawAmount(_amount, keyperStake.amount);
 
         // Checks below only apply if keyper is still a keyper
         // if keyper is not a keyper anymore, anyone can unstake for them, lock period is
@@ -308,24 +282,21 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
 
             // If the lock period is less than the global lock period, the stake
             // must be locked for the lock period
-            if (lockPeriod < keyperStake.lockPeriod) {
-                require(
-                    block.timestamp > keyperStake.timestamp + lockPeriod,
-                    StakeIsStillLocked()
-                );
-            } else {
-                // If the global lock period is greater than the stake lock period,
-                // the stake must be locked for the stake lock period
-                require(
-                    block.timestamp >
-                        keyperStake.timestamp + keyperStake.lockPeriod,
-                    StakeIsStillLocked()
-                );
-            }
+            // If the global lock period is greater than the stake lock period,
+            // the stake must be locked for the stake lock period
+
+            uint256 lock = keyperStake.lockPeriod > lockPeriod
+                ? lockPeriod
+                : keyperStake.lockPeriod;
+
+            require(
+                block.timestamp > keyperStake.timestamp + lock,
+                StakeIsStillLocked()
+            );
 
             // The unstake can't never result in a keyper SHU staked < minStake
             require(
-                maxWithdraw(keyper, keyperStake.amount) >= amount,
+                _maxWithdraw(keyper, keyperStake.amount) >= amount,
                 WithdrawAmountTooHigh()
             );
         } else {
@@ -336,70 +307,31 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
             );
         }
 
-        _unstake(keyper, stakeId, amount);
-    }
-
-    /// @notice Unstake stakeId and claim all rewards
-    ///          - stakeId must be a valid id beloging to the caller
-    ///          - only keypers can call this function
-    ///          - unstake can't never result in a keyper SHU staked < minStake
-    ///            if the keyper is still a keyper
-    ///          - if the stake lock period is less than the global lock period, the
-    ///            block.timestamp must be greater than the stake timestamp +
-    ///            lock period
-    ///          - if the stake lock period is greater than the global lock
-    ///            period, the block.timestamp must be greater than the stake timestamp +
-    ///            lock period
-    /// @param stakeId The stake index
-    /// @return amount The amount of SHU unstaked plus the rewards
-    function unstakeAndClaimAllRewards(
-        uint256 stakeId
-    ) external onlyKeyper updateRewards returns (uint256 amount) {
-        address keyper = msg.sender;
-        require(
-            keyperStakes[keyper].contains(stakeId),
-            StakeDoesNotBelongToKeyper()
-        );
-        Stake memory keyperStake = stakes[stakeId];
-
-        require(keyperStake.amount > 0, StakeDoesNotExist());
-
-        if (lockPeriod < keyperStake.lockPeriod) {
-            require(
-                block.timestamp > keyperStake.timestamp + lockPeriod,
-                StakeIsStillLocked()
-            );
-        } else {
-            require(
-                block.timestamp >
-                    keyperStake.timestamp + keyperStake.lockPeriod,
-                StakeIsStillLocked()
-            );
-        }
-
-        amount = maxWithdraw(keyper, keyperStake.amount);
-
-        require(amount >= keyperStake.amount, WithdrawAmountTooHigh());
-
         // Calculates the amounf of shares to burn
-        uint256 shares = convertToShares(amount);
+        uint256 shares = previewWithdraw(amount);
 
         // Burn the shares
         _burn(keyper, shares);
 
+        // Decrease the amount from the stake
+        stakes[stakeId].amount -= amount;
+
         // Decrease the amount from the total locked
-        totalLocked[keyper] -= keyperStake.amount;
+        totalLocked[keyper] -= amount;
 
-        // Remove the stake from the stakes mapping
-        delete stakes[stakeId];
+        // If the stake is empty, remove it
+        if (stakes[stakeId].amount == 0) {
+            // Remove the stake from the stakes mapping
+            delete stakes[stakeId];
 
-        // Remove the stake from the keyper stakes
-        keyperStakes[keyper].remove(stakeId);
+            // Remove the stake from the keyper stakes
+            keyperStakes[keyper].remove(stakeId);
+        }
 
         // Transfer the SHU to the keyper
         stakingToken.safeTransfer(keyper, amount);
 
-        emit UnstakedAndClaimedAllRewards(keyper, amount, shares);
+        emit Unstaked(keyper, amount, shares);
     }
 
     /// @notice Claim rewards
@@ -421,19 +353,12 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         // Prevents the keyper from claiming more than they should
         uint256 maxWithdrawAmount = maxWithdraw(keyper);
 
-        // If the amount is 0, claim all the rewards
-        if (amount == 0) {
-            rewards = maxWithdrawAmount;
-        } else {
-            require(amount <= maxWithdrawAmount, WithdrawAmountTooHigh());
-
-            rewards = amount;
-        }
+        rewards = _calculateWithdrawAmount(amount, maxWithdrawAmount);
 
         require(rewards > 0, NoRewardsToClaim());
 
         // Calculates the amount of shares to burn
-        uint256 shares = convertToShares(rewards);
+        uint256 shares = previewWithdraw(rewards);
 
         _burn(keyper, shares);
 
@@ -479,21 +404,8 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param keyper The keyper address
     /// @param isKeyper Whether the keyper is a keyper or not
     function setKeyper(address keyper, bool isKeyper) external onlyOwner {
-        _setKeyper(keyper, isKeyper);
-    }
-
-    /// @notice Set multiple keypers
-    ///       - if the keypers are not keypers anymore, the first stake will be
-    ///         unstaked
-    /// @param _keypers The keyper addresses
-    /// @param isKeyper Whether the keypers are keypers or not
-    function setKeypers(
-        address[] memory _keypers,
-        bool isKeyper
-    ) external onlyOwner {
-        for (uint256 i = 0; i < _keypers.length; i++) {
-            _setKeyper(_keypers[i], isKeyper);
-        }
+        keypers[keyper] = isKeyper;
+        emit KeyperSet(keyper, isKeyper);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -518,27 +430,51 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
                               VIEW FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Get the stake ids belonging to a keyper
+    function getKeyperStakeIds(
+        address keyper
+    ) external view returns (uint256[] memory) {
+        return keyperStakes[keyper].values();
+    }
+
+    function previewWithdraw(
+        uint256 assets
+    ) public view virtual returns (uint256) {
+        // sum + 1 on both sides to prevent donation attack
+        return assets.mulDivUp(totalSupply() + 1, _totalAssets() + 1);
+    }
+
+    /// @notice Get the total amount of shares the assets are worth
+    /// @param assets The amount of assets
+    function convertToShares(
+        uint256 assets
+    ) public view virtual returns (uint256) {
+        // sum + 1 on both sides to prevent donation attack
+        return assets.mulDivDown(totalSupply() + 1, _totalAssets() + 1);
+    }
+
+    /// @notice Get the total amount of assets the shares are worth
+    /// @param shares The amount of shares
+    function convertToAssets(
+        uint256 shares
+    ) public view virtual returns (uint256) {
+        // sum + 1 on both sides to prevent donation attack
+        return shares.mulDivDown(_totalAssets() + 1, totalSupply() + 1);
+    }
+
     /// @notice Get the maximum amount of assets that a keyper can withdraw
     ////         - if the keyper has no shares, the function will revert
     ///          - if the keyper sSHU balance is less or equal than the minimum stake or the total
     ///            locked amount, the function will return 0
     /// @param keyper The keyper address
     /// @return amount The maximum amount of assets that a keyper can withdraw
-    function maxWithdraw(
-        address keyper
-    ) public view virtual returns (uint256 amount) {
-        uint256 shares = balanceOf(keyper);
-        require(shares > 0, UserHasNoShares());
-
-        uint256 assets = convertToAssets(shares);
-
-        uint256 compare = totalLocked[keyper] >= minStake
-            ? totalLocked[keyper]
-            : minStake;
-
-        // need the first branch as convertToAssets rounds down
-        amount = compare >= assets ? 0 : assets - compare;
+    function maxWithdraw(address keyper) public view virtual returns (uint256) {
+        return _maxWithdraw(keyper, 0);
     }
+
+    /*//////////////////////////////////////////////////////////////
+                          INTERNAL FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Get the maximum amount of assets that a keyper can withdraw
     ///         after unlocking a certain amount
@@ -548,10 +484,10 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
     /// @param keyper The keyper address
     /// @param unlockedAmount The amount of assets to unlock
     /// @return amount The maximum amount of assets that a keyper can withdraw after unlocking a certain amount
-    function maxWithdraw(
+    function _maxWithdraw(
         address keyper,
         uint256 unlockedAmount
-    ) public view virtual returns (uint256 amount) {
+    ) internal view virtual returns (uint256 amount) {
         uint256 shares = balanceOf(keyper);
         require(shares > 0, UserHasNoShares());
 
@@ -564,85 +500,24 @@ contract Staking is ERC20VotesUpgradeable, Ownable2StepUpgradeable {
         amount = compare >= assets ? 0 : assets - compare;
     }
 
-    /// @notice Get the total amount of shares the assets are worth
-    /// @param assets The amount of assets
-    function convertToShares(
-        uint256 assets
-    ) public view virtual returns (uint256) {
-        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? assets : assets.mulDivDown(supply, totalAssets());
-    }
-
-    /// @notice Get the total amount of assets the shares are worth
-    /// @param shares The amount of shares
-    function convertToAssets(
-        uint256 shares
-    ) public view virtual returns (uint256) {
-        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? shares : shares.mulDivDown(totalAssets(), supply);
-    }
-
     /// @notice Get the amount of SHU staked for all keypers
-    function totalAssets() public view virtual returns (uint256) {
+    function _totalAssets() internal view virtual returns (uint256) {
         return stakingToken.balanceOf(address(this));
     }
 
-    /// @notice Get the stake ids belonging to a keyper
-    function getKeyperStakeIds(
-        address keyper
-    ) external view returns (uint256[] memory) {
-        return keyperStakes[keyper].values();
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                          INTERNAL FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
-
-    function _setKeyper(address keyper, bool isKeyper) internal {
-        keypers[keyper] = isKeyper;
-        emit KeyperSet(keyper, isKeyper);
-
-        // if not a keyper anymore unstake the first stake
-        if (!isKeyper) {
-            EnumerableSet.UintSet storage stakesIds = keyperStakes[keyper];
-            if (stakesIds.length() > 0) {
-                uint256 stakeId = stakesIds.at(0);
-                _unstake(keyper, stakeId, stakes[stakeId].amount);
-            }
+    /// @notice Calculates the amount to withdraw
+    /// @param _amount The amount to withdraw
+    /// @param maxWithdrawAmount The maximum amount that can be withdrawn
+    function _calculateWithdrawAmount(
+        uint256 _amount,
+        uint256 maxWithdrawAmount
+    ) internal pure returns (uint256 amount) {
+        // If the amount is 0, withdraw all available amount
+        if (_amount == 0) {
+            amount = maxWithdrawAmount;
+        } else {
+            require(_amount <= maxWithdrawAmount, WithdrawAmountTooHigh());
+            amount = _amount;
         }
-    }
-
-    function _unstake(
-        address keyper,
-        uint256 stakeId,
-        uint256 amount
-    ) internal {
-        // Calculates the amounf of shares to burn
-        uint256 shares = convertToShares(amount);
-
-        // Burn the shares
-        _burn(keyper, shares);
-
-        // Decrease the amount from the stake
-        stakes[stakeId].amount -= amount;
-
-        // Decrease the amount from the total locked
-        totalLocked[keyper] -= amount;
-
-        // If the stake is empty, remove it
-        if (stakes[stakeId].amount == 0) {
-            // Remove the stake from the stakes mapping
-            delete stakes[stakeId];
-
-            // Remove the stake from the keyper stakes
-            keyperStakes[keyper].remove(stakeId);
-        }
-
-        // Transfer the SHU to the keyper
-        stakingToken.safeTransfer(keyper, amount);
-
-        emit Unstaked(keyper, amount, shares);
     }
 }

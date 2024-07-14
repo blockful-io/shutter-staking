@@ -61,6 +61,7 @@ contract OwnableFunctions is RewardsDistributorTest {
         address _receiver,
         uint256 _emissionRate
     ) public {
+        _emissionRate = bound(_emissionRate, 1, 1e18);
         vm.assume(_receiver != address(0));
 
         vm.expectEmit();
@@ -75,6 +76,7 @@ contract OwnableFunctions is RewardsDistributorTest {
         address _receiver,
         uint256 _emissionRate
     ) public {
+        _emissionRate = bound(_emissionRate, 1, 1e18);
         vm.assume(_receiver != address(0));
 
         rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
@@ -90,6 +92,7 @@ contract OwnableFunctions is RewardsDistributorTest {
         address _receiver,
         uint256 _emissionRate
     ) public {
+        _emissionRate = bound(_emissionRate, 1, 1e18);
         vm.assume(_receiver != address(0));
 
         rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
@@ -104,6 +107,7 @@ contract OwnableFunctions is RewardsDistributorTest {
         address _receiver,
         uint256 _emissionRate
     ) public {
+        _emissionRate = bound(_emissionRate, 1, 1e18);
         vm.assume(_receiver != address(0));
 
         rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
@@ -127,6 +131,13 @@ contract OwnableFunctions is RewardsDistributorTest {
     ) public {
         vm.expectRevert(RewardsDistributor.ZeroAddress.selector);
         rewardsDistributor.setRewardConfiguration(address(0), _emissionRate);
+    }
+
+    function testFuzz_RevertIf_SetRewardConfigurationEmissionRateZero(
+        address _receiver
+    ) public {
+        vm.expectRevert(RewardsDistributor.EmissionRateZero.selector);
+        rewardsDistributor.setRewardConfiguration(_receiver, 0);
     }
 
     function testFuzz_RevertIf_SetRewardConfigurationNotOwner(
@@ -314,7 +325,7 @@ contract CollectRewards is RewardsDistributorTest {
     ) public {
         vm.assume(address(_receiver) != address(0));
 
-        rewardsDistributor.setRewardConfiguration(_receiver, 0);
+        rewardsDistributor.removeRewardConfiguration(_receiver);
 
         _jumpAhead(_jump);
 
