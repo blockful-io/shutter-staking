@@ -7,4 +7,11 @@ contract StakingHarness is Staking {
     function exposed_nextStakeId() external view returns (uint256) {
         return nextStakeId;
     }
+
+    function exposed_maxWithdraw(
+        address keyper,
+        uint256 unlockedAmount
+    ) external view virtual returns (uint256) {
+        return _maxWithdraw(keyper, unlockedAmount);
+    }
 }

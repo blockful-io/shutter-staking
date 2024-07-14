@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {console} from "@forge-std/console.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
@@ -25,6 +26,9 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
     //////////////////////////////////////////////////////////////*/
+
+    /// @notice Minimum non-zero shares amount to prevent donation attack
+    uint256 private constant MIN_SHARES = 1e18;
 
     /// @notice the staking token, i.e. SHU
     /// @dev set in initialize, can't be changed
@@ -440,9 +444,8 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
     function previewWithdraw(
         uint256 assets
     ) public view virtual returns (uint256) {
-        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? assets : assets.mulDivUp(supply, _totalAssets());
+        // sum + 1 on both sides to prevent donation attack
+        return assets.mulDivUp(totalSupply() + 1, _totalAssets() + 1);
     }
 
     /// @notice Get the total amount of shares the assets are worth
@@ -450,9 +453,8 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
     function convertToShares(
         uint256 assets
     ) public view virtual returns (uint256) {
-        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? assets : assets.mulDivDown(supply, _totalAssets());
+        // sum + 1 on both sides to prevent donation attack
+        return assets.mulDivDown(totalSupply() + 1, _totalAssets() + 1);
     }
 
     /// @notice Get the total amount of assets the shares are worth
@@ -460,9 +462,8 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
     function convertToAssets(
         uint256 shares
     ) public view virtual returns (uint256) {
-        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? shares : shares.mulDivDown(_totalAssets(), supply);
+        // sum + 1 on both sides to prevent donation attack
+        return shares.mulDivDown(_totalAssets() + 1, totalSupply() + 1);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -495,24 +496,21 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
         require(shares > 0, UserHasNoShares());
 
         uint256 assets = convertToAssets(shares);
+        console.log("assets", assets);
 
         uint256 locked = totalLocked[keyper] - unlockedAmount;
         uint256 compare = locked >= minStake ? locked : minStake;
+        console.log("compare", compare);
 
         // need the first branch as convertToAssets rounds down
         amount = compare >= assets ? 0 : assets - compare;
+        console.log("amount", amount);
     }
 
     /// @notice Get the amount of SHU staked for all keypers
     function _totalAssets() internal view virtual returns (uint256) {
         return stakingToken.balanceOf(address(this));
     }
-
-    function _unstake(
-        address keyper,
-        uint256 stakeId,
-        uint256 amount
-    ) internal {}
 
     function _calculateWithdrawAmount(
         uint256 _amount,
@@ -525,5 +523,9 @@ contract Staking is ERC20VotesUpgradeable, OwnableUpgradeable {
             require(_amount <= maxWithdrawAmount, WithdrawAmountTooHigh());
             amount = _amount;
         }
+    }
+
+    function _decimalsOffset() internal view virtual returns (uint8) {
+        return 0;
     }
 }

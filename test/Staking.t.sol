@@ -22,7 +22,7 @@ contract StakingTest is Test {
     MockGovToken public govToken;
 
     uint256 constant LOCK_PERIOD = 182 days; // 6 months
-    uint256 constant MIN_STAKE = 50_000 * 1e18; // 50k
+    uint256 constant MIN_STAKE = 50_000e18; // 50k
     uint256 constant REWARD_RATE = 0.1e18;
 
     function setUp() public {
@@ -57,10 +57,10 @@ contract StakingTest is Test {
             MIN_STAKE
         );
 
-        rewardsDistributor.setRewardConfiguration(
-            address(staking),
-            REWARD_RATE
-        );
+        //        rewardsDistributor.setRewardConfiguration(
+        //            address(staking),
+        //            REWARD_RATE
+        //        );
 
         // fund reward distribution
         govToken.transfer(address(rewardsDistributor), 100_000_000e18);
@@ -155,6 +155,18 @@ contract StakingTest is Test {
             _rewardsDistributed;
 
         return supply == 0 ? _amount : _amount.mulDivDown(supply, assets);
+    }
+
+    function _assertMinRelativeLoss(
+        uint256 spent,
+        uint256 received,
+        uint256 minRelLoss,
+        string memory errorMessage
+    ) internal pure {
+        assertGt(spent, received, "Spent should be greater than received");
+
+        uint256 relativeLoss = ((spent - received) * 1e18) / spent;
+        assertGe(relativeLoss, minRelLoss, errorMessage);
     }
 }
 
@@ -639,6 +651,156 @@ contract Stake is StakingTest {
         staking.stake(0);
 
         vm.stopPrank();
+    }
+
+    function test_DonationAttack(address bob, address alice) public {
+        uint256 initialStake = MIN_STAKE;
+        uint256 donationAmount = MIN_STAKE * 100;
+        uint256 bobStake = MIN_STAKE * 100;
+
+        // first alice mints
+        _mintGovToken(alice, initialStake);
+        _setKeyper(alice, true);
+        _stake(alice, initialStake);
+
+        assertEq(staking.totalSupply(), initialStake);
+
+        // simulate donation
+        govToken.mint(address(staking), donationAmount);
+
+        assertEq(staking.totalSupply(), initialStake);
+        assertEq(
+            govToken.balanceOf(address(staking)),
+            initialStake + donationAmount
+        );
+
+        // bob mints
+        _mintGovToken(bob, bobStake);
+        _setKeyper(bob, true);
+        uint256 bobStakeId = _stake(bob, bobStake);
+
+        // bob shares
+        uint256 bobShares = staking.balanceOf(bob);
+        console.log("bob shares", bobShares);
+
+        //vm.prank(alice);
+        // uint256 aliceUnstake = staking.unstake(alice, 1, 0);
+        // assertEq(aliceUnstake, initialStake);
+
+        // alice claim rewards withdrawing donation
+        vm.prank(alice);
+        uint256 aliceRewards = staking.claimRewards(0);
+
+        // attacker cost is greater than expected gains
+        assertGt(
+            donationAmount,
+            aliceRewards,
+            "Alice receive more than expend for the attack"
+        );
+
+        _jumpAhead(vm.getBlockTimestamp() + LOCK_PERIOD);
+        // bob unstake maximum he can unstake
+        uint256 maxBobCanWithdraw = staking.exposed_maxWithdraw(bob, bobStake);
+        vm.prank(bob);
+        staking.unstake(bob, bobStakeId, maxBobCanWithdraw);
+
+        uint256 bobBalance = govToken.balanceOf(bob);
+        uint256 aliceBalance = govToken.balanceOf(alice);
+
+        vm.prank(bob);
+        uint256 bobRewards = staking.claimRewards(0);
+        console.log("bob rewards", bobRewards);
+
+        // bob lost a small amount maximum lost is 1%
+        assertApproxEqRel(
+            bobBalance,
+            bobStake + bobRewards,
+            0.01e18,
+            "Bob lost more than 1%"
+        );
+
+        // at the end Alice still lost more than bob
+        assertGtDecimal(
+            donationAmount - aliceRewards,
+            bobStake - bobBalance,
+            1e18,
+            "Alice receive more than bob"
+        );
+    }
+
+    function test_DonationAttackNoRewards(
+        address bob,
+        address alice,
+        uint256 attackSize
+    ) public {
+        rewardsDistributor.removeRewardConfiguration(address(staking));
+
+        attackSize = bound(attackSize, 2, 1000);
+
+        uint256 initialStake = MIN_STAKE;
+        uint256 donationAmount = MIN_STAKE * attackSize;
+        uint256 bobStake = MIN_STAKE * attackSize;
+
+        // first alice mints
+        _mintGovToken(alice, initialStake);
+        _setKeyper(alice, true);
+        _stake(alice, initialStake);
+
+        assertEq(staking.totalSupply(), initialStake);
+
+        // simulate donation
+        govToken.mint(address(staking), donationAmount);
+
+        assertEq(staking.totalSupply(), initialStake);
+        assertEq(
+            govToken.balanceOf(address(staking)),
+            initialStake + donationAmount
+        );
+
+        // bob mints
+        _mintGovToken(bob, bobStake);
+        _setKeyper(bob, true);
+        uint256 bobStakeId = _stake(bob, bobStake);
+
+        _jumpAhead(vm.getBlockTimestamp() + LOCK_PERIOD);
+        vm.prank(alice);
+        uint256 aliceUnstake = staking.unstake(alice, 1, 0);
+        assertEq(aliceUnstake, initialStake);
+
+        // alice claim rewards withdrawing donation
+        vm.prank(alice);
+        uint256 aliceRewards = staking.claimRewards(0);
+
+        // attacker cost is greater than expected gains
+        assertGtDecimal(
+            donationAmount,
+            aliceRewards,
+            1e18,
+            "Alice receive more than expend for the attack"
+        );
+
+        // bob unstake maximum he can unstake
+        uint256 maxBobCanWithdraw = staking.exposed_maxWithdraw(bob, bobStake);
+        vm.prank(bob);
+        staking.unstake(bob, bobStakeId, maxBobCanWithdraw);
+
+        uint256 bobBalance = govToken.balanceOf(bob);
+
+        // alice lost a minimum amount of 0.01%
+        _assertMinRelativeLoss(
+            donationAmount, // how much she paid for the attack
+            aliceRewards, // how much she received
+            0.001e18,
+            "Alice did not lose at least 1%"
+        );
+
+        // at the end Alice still lost more than bob
+        assertGtDecimal(
+            donationAmount - aliceRewards,
+            bobStake - bobBalance,
+            1e18,
+            "Alice receive more than bob"
+        );
     }
 }
 
@@ -1172,16 +1334,14 @@ contract Unstake is StakingTest {
         _setKeyper(_depositor, true);
 
         _stake(_depositor, _amount);
-
-        // stake again
-        uint256 stakeId = _stake(_depositor, _amount);
+        _stake(_depositor, _amount);
         assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
 
         _setKeyper(_depositor, false);
 
         vm.startPrank(_anyone);
-        staking.unstake(_depositor, stakeId, 0);
-        staking.unstake(_depositor, stakeId, 1);
+        staking.unstake(_depositor, 1, 0);
+        staking.unstake(_depositor, 2, 0);
         vm.stopPrank();
 
         assertEq(govToken.balanceOf(_depositor), _amount * 2, "Wrong balance");
