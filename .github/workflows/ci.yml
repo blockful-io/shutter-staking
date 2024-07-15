@@ -41,7 +41,7 @@ jobs:
                   )" >> $GITHUB_ENV
 
             - name: Run tests
-              run: forge test --no-match-contract Integration
+              run: forge test
 
     coverage:
         runs-on: ubuntu-latest
@@ -59,7 +59,7 @@ jobs:
                   )" >> $GITHUB_ENV
 
             - name: Run coverage
-              run: forge coverage --report summary --report lcov --ir-minimum --no-match-contract Integration
+              run: forge coverage --report summary --report lcov --ir-minimum
 
             # To ignore coverage for certain directories modify the paths in this step as needed. The
             # below default ignores coverage results for the test and script directories. Alternatively,
