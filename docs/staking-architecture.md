@@ -15,11 +15,18 @@
 
 ## Variables
 
-### `stakingToken`
+### `IERC20 stakingToken`
 
 The staking token must be immutable. If the DAO changes the staking token, the
 keypers will not be able to withdrawn their old stakes, therefore, there is no
 function to change the staking token. If the DAO upgrades the SHU token to a new contract, it must also redeploy the staking contract and ask the keypers to migrate their stakes to the new contract.
+
+### `IRewardsDistributor rewardsDistributor`
+
+The rewards distributor contract address. The rewards distributor contract is
+responsible for distributing the rewards to the keypers. The rewards are
+withdrawn from the rewards distribution contract every time a keyper stakes or
+claim rewards.
 
 ### `uint256 public lockPeriod`
 
@@ -65,7 +72,8 @@ stakeIds`: a mapping from keypers to their stake ids. This mapping is used
 
 ## Rewards Calculation Mechanismm
 
-Rewards are withdrawn from the rewards distribution contract every time a keyper
+The rewards method choosen was a ERC4626 vault implementation.
+The rewards are withdrawn from the rewards distribution contract every time a keyper
 stakes or claim rewards. When the rewards are claimed, the SHU balance of the
 contract increases. Therefore, when a keyper decides to claim their rewards,
 they will get a better conversion rate from sSHU (shares) to SHU, as the total
@@ -147,3 +155,10 @@ unlocked stakes.
 
 -   if the keyper has no shares, the function will revert.
 -   if the keyper sSHU balance is less or equal than the minimum stake or the total locked amount, the function will return 0.
+
+## Security Considerations
+
+-   The contract doesn't use the Ownable2Step pattern due to the 24KB contract
+    size limit.
+-   If the Owner address gets compromised, the attacker can increase the minimum
+    stake to a very high value, preventing keypers from unstaking their SHU tokens.
