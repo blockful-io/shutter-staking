@@ -45,6 +45,10 @@ contract Delegate is ERC20VotesUpgradeable, OwnableUpgradeable {
     /// @notice Unique identifier that will be used for the next stake.
     uint256 internal nextStakeId;
 
+    /// @notice the lock period in seconds
+    /// @dev only owner can change
+    uint256 public lockPeriod;
+
     /*//////////////////////////////////////////////////////////////
                                  STRUCTS
     //////////////////////////////////////////////////////////////*/
@@ -52,6 +56,7 @@ contract Delegate is ERC20VotesUpgradeable, OwnableUpgradeable {
     /// @notice the stake struct
     /// @dev timestamp is the time the stake was made
     struct Stake {
+        uint256 keyper;
         uint256 amount;
         uint256 timestamp;
         uint256 lockPeriod;
@@ -140,21 +145,162 @@ contract Delegate is ERC20VotesUpgradeable, OwnableUpgradeable {
     /// @param _rewardsDistributor The address of the rewards distributor
     /// contract
     /// @param _staking The address of the staking contract
+    /// @param _lockPeriod The lock period in seconds
     function initialize(
         address _owner,
         address _stakingToken,
         address _rewardsDistributor,
-        address _staking
+        address _staking,
+        uint256 _lockPeriod
     ) public initializer {
-        __ERC20_init("Delegated-staked SHU", "sdSHU");
+        __ERC20_init("Delegated Staking SHU", "dSHU");
 
         // Transfer ownership to the DAO contract
         _transferOwnership(_owner);
 
         stakingToken = IERC20(_staking);
         rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
+        lockPeriod = _lockPeriod;
 
         nextStakeId = 1;
+    }
+
+    /// @notice Stake SHU
+    ///          - amount will be locked in the contract for the lock period
+    ///          - user must approve the contract to spend the SHU before staking
+    ///          - this function will mint sdSHU to the keyper
+    ////         - dSHU is non-transferable
+    /// @param amount The amount of SHU to stake
+    /// @return stakeId The index of the stake
+    function stake(
+        address keyper,
+        uint256 amount
+    ) external updateRewards returns (uint256 stakeId) {
+        require(amount > 0, ZeroAmount());
+
+        address user = msg.sender;
+
+        // Update the keyper's SHU balance
+        totalLocked[user] += amount;
+
+        // Mint the shares
+        _mint(user, convertToShares(amount));
+
+        // Get next stake id and increment it
+        stakeId = nextStakeId++;
+
+        // Add the stake to the stakes mapping
+        stakes[stakeId].amount = amount;
+        stakes[stakeId].timestamp = block.timestamp;
+        stakes[stakeId].lockPeriod = lockPeriod;
+
+        // Add the stake to the keyper stakes
+        userStakes[user].add(stakeId);
+
+        // Lock the SHU in the contract
+        stakingToken.safeTransferFrom(keyper, address(this), amount);
+
+        emit Staked(user, keyper, amount, lockPeriod);
+    }
+
+    /// @notice Unstake SHU
+    ///          - stakeId must be a valid id beloging to the user
+    ///          - if the stake lock period is less than the global lock period, the
+    ///            block.timestamp must be greater than the stake timestamp +
+    ///            lock period
+    ///          - if the stake lock period is greater than the global lock
+    ///            period, the block.timestamp must be greater than the stake timestamp +
+    ///            lock period
+    ///          - if amount is zero, the contract will transfer the stakeId
+    ///            total amount
+    ///          - if amount is specified, it must be less than the stakeId amount
+    ///          - amount must be specified in SHU, not dSHU
+    /// @param stakeId The stake index
+    /// @param _amount The amount
+    /// @return amount The amount of SHU unstaked
+    function unstake(
+        uint256 stakeId,
+        uint256 _amount
+    ) external returns (uint256 amount) {
+        address user = msg.sender;
+        require(userStakes[user].contains(stakeId), StakeDoesNotBelongToUser());
+        Stake memory userStake = stakes[stakeId];
+
+        require(userStake.amount > 0, StakeDoesNotExist());
+
+        amount = _calculateWithdrawAmount(_amount, userStake.amount);
+
+        // If the lock period is less than the global lock period, the stake
+        // must be locked for the lock period
+        // If the global lock period is greater than the stake lock period,
+        // the stake must be locked for the stake lock period
+        uint256 lock = userStake.lockPeriod > lockPeriod
+            ? lockPeriod
+            : userStake.lockPeriod;
+
+        require(
+            block.timestamp > userStake.timestamp + lock,
+            StakeIsStillLocked()
+        );
+
+        // Calculates the amounf of shares to burn
+        uint256 shares = previewWithdraw(amount);
+
+        // Burn the shares
+        _burn(user, shares);
+
+        // Decrease the amount from the stake
+        stakes[stakeId].amount -= amount;
+
+        // Decrease the amount from the total locked
+        totalLocked[user] -= amount;
+
+        // If the stake is empty, remove it
+        if (stakes[stakeId].amount == 0) {
+            // Remove the stake from the stakes mapping
+            delete stakes[stakeId];
+
+            // Remove the stake from the user stakes
+            userStakes[user].remove(stakeId);
+        }
+
+        // Transfer the SHU to the keyper
+        stakingToken.safeTransfer(user, amount);
+
+        emit Unstaked(user, amount, shares);
+    }
+
+    /// @notice Claim rewards
+    ///         - If no amount is specified, will claim all the rewards
+    ///         - If the amount is specified, the amount must be less than the
+    ///           maximum withdrawable amount. The maximum withdrawable amount
+    ///           is the total amount of assets the user has minus the
+    ///           total locked amount
+    ///         - If the claim results in a balance less than the total locked
+    ///            amount, the claim will be rejected
+    ///         - The keyper can claim the rewards at any time as longs there is
+    ///           a reward to claim
+    /// @param amount The amount of rewards to claim
+    function claimRewards(
+        uint256 amount
+    ) external updateRewards returns (uint256 rewards) {
+        address user = msg.sender;
+
+        // Prevents the keyper from claiming more than they should
+        uint256 maxWithdrawAmount = maxWithdraw(user);
+
+        rewards = _calculateWithdrawAmount(amount, maxWithdrawAmount);
+
+        require(rewards > 0, NoRewardsToClaim());
+
+        // Calculates the amount of shares to burn
+        uint256 shares = previewWithdraw(rewards);
+
+        _burn(user, shares);
+
+        stakingToken.safeTransfer(user, rewards);
+
+        emit RewardsClaimed(user, rewards);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -177,6 +323,14 @@ contract Delegate is ERC20VotesUpgradeable, OwnableUpgradeable {
         staking = IStaking(_stakingContract);
 
         emit NewStakingContract(_stakingContract);
+    }
+
+    /// @notice Set the lock period
+    /// @param _lockPeriod The lock period in seconds
+    function setLockPeriod(uint256 _lockPeriod) external onlyOwner {
+        lockPeriod = _lockPeriod;
+
+        emit NewLockPeriod(_lockPeriod);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -234,20 +388,40 @@ contract Delegate is ERC20VotesUpgradeable, OwnableUpgradeable {
     }
 
     /// @notice Get the maximum amount of assets that a keyper can withdraw
-    ////         - if the keyper has no shares, the function will revert
-    ///          - if the keyper sSHU balance is less or equal than the minimum stake or the total
+    ////         - if the user has no shares, the function will revert
+    ///          - if the user dSHU balance is less or equal than the total
     ///            locked amount, the function will return 0
-    /// @param keyper The keyper address
-    /// @return amount The maximum amount of assets that a keyper can withdraw
-    function maxWithdraw(address keyper) public view virtual returns (uint256) {
-        uint256 shares = balanceOf(keyper);
+    /// @param user The user address
+    /// @return amount The maximum amount of assets that a user can withdraw
+    function maxWithdraw(address user) public view virtual returns (uint256) {
+        uint256 shares = balanceOf(user);
         require(shares > 0, UserHasNoShares());
 
-        return convertToAssets(shares);
+        uint256 assets = convertToAssets(shares);
+        uint256 locked = totalLocked[keyper] - unlockedAmount;
+
+        // need the first branch as convertToAssets rounds down
+        amount = locked >= assets ? 0 : assets - locked;
     }
 
     /// @notice Get the amount of SHU staked for all keypers
     function _totalAssets() internal view virtual returns (uint256) {
         return stakingToken.balanceOf(address(this));
+    }
+
+    /// @notice Calculates the amount to withdraw
+    /// @param _amount The amount to withdraw
+    /// @param maxWithdrawAmount The maximum amount that can be withdrawn
+    function _calculateWithdrawAmount(
+        uint256 _amount,
+        uint256 maxWithdrawAmount
+    ) internal pure returns (uint256 amount) {
+        // If the amount is 0, withdraw all available amount
+        if (_amount == 0) {
+            amount = maxWithdrawAmount;
+        } else {
+            require(_amount <= maxWithdrawAmount, WithdrawAmountTooHigh());
+            amount = _amount;
+        }
     }
 }

@@ -291,16 +291,16 @@
   "libraries": [],
   "pending": [],
   "returns": {
-    "rewardsDistributor": {
-      "internal_type": "contract RewardsDistributor",
-      "value": "0x8B5E338c47Dee476e7437060f625aDD05d0CFED7"
-    },
     "stakingProxy": {
       "internal_type": "contract Staking",
       "value": "0x60076ebcca7aD8825F10d3649378931D9C1cB24E"
+    },
+    "rewardsDistributor": {
+      "internal_type": "contract RewardsDistributor",
+      "value": "0x8B5E338c47Dee476e7437060f625aDD05d0CFED7"
     }
   },
-  "timestamp": 1721089445,
+  "timestamp": 1721088564,
   "chain": 11155111,
   "commit": "ffa5272"
 }
