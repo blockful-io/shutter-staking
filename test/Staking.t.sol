@@ -155,18 +155,6 @@ contract StakingTest is Test {
 
         return _amount.mulDivDown(supply + 1, assets + 1);
     }
-
-    function _assertMinRelativeLoss(
-        uint256 spent,
-        uint256 received,
-        uint256 minRelLoss,
-        string memory errorMessage
-    ) internal pure {
-        assertGt(spent, received, "Spent should be greater than received");
-
-        uint256 relativeLoss = ((spent - received) * 1e18) / spent;
-        assertGe(relativeLoss, minRelLoss, errorMessage);
-    }
 }
 
 contract Initializer is StakingTest {

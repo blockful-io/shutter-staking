@@ -16,7 +16,7 @@ interface IStaking {
 
 /// @notice Shutter Delegate Staking Contract
 ///         Allows users to stake SHU and earn rewards in exchange.
-contract Delegate is ERC20VotesUpgradeable, OwnableUpgradeable {
+contract DelegateStaking is ERC20VotesUpgradeable, OwnableUpgradeable {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
