@@ -72,12 +72,20 @@ contract Delegate is ERC20VotesUpgradeable, OwnableUpgradeable {
     // @notice stake ids belonging to a user
     mapping(address user => EnumerableSet.UintSet stakeIds) private userStakes;
 
+    /// @notice how many SHU a user has locked
+    mapping(address keyper => uint256 totalLocked) public totalLocked;
+
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Emitted when a keyper stakes SHU
-    event Staked(address indexed user, address indexed keyper, uint256 amount);
+    event Staked(
+        address indexed user,
+        address indexed keyper,
+        uint256 amount,
+        uint256 lockPeriod
+    );
 
     /// @notice Emitted when a keyper unstakes SHU
     event Unstaked(address indexed user, uint256 amount, uint256 shares);
@@ -90,6 +98,9 @@ contract Delegate is ERC20VotesUpgradeable, OwnableUpgradeable {
 
     /// @notice Emitted when a new staking contract is set
     event NewStakingContract(address indexed stakingContract);
+
+    /// @notice Emitted when the lock period is changed
+    event NewLockPeriod(uint256 indexed lockPeriod);
 
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
@@ -114,6 +125,9 @@ contract Delegate is ERC20VotesUpgradeable, OwnableUpgradeable {
     /// @notice Thrown when someone try to unstake a amount that is greater than
     /// the stake amount belonging to the stake id
     error WithdrawAmountTooHigh();
+
+    /// @notice Thrown when someone try to unstake a stake that is still locked
+    error StakeIsStillLocked();
 
     /// @notice Thrown when a keyper try to claim rewards but has no rewards to
     /// claim
@@ -144,13 +158,13 @@ contract Delegate is ERC20VotesUpgradeable, OwnableUpgradeable {
     /// @param _stakingToken The address of the staking token, i.e. SHU
     /// @param _rewardsDistributor The address of the rewards distributor
     /// contract
-    /// @param _staking The address of the staking contract
+    /// @param _stakingContract The address of the staking contract
     /// @param _lockPeriod The lock period in seconds
     function initialize(
         address _owner,
         address _stakingToken,
         address _rewardsDistributor,
-        address _staking,
+        address _stakingContract,
         uint256 _lockPeriod
     ) public initializer {
         __ERC20_init("Delegated Staking SHU", "dSHU");
@@ -158,8 +172,9 @@ contract Delegate is ERC20VotesUpgradeable, OwnableUpgradeable {
         // Transfer ownership to the DAO contract
         _transferOwnership(_owner);
 
-        stakingToken = IERC20(_staking);
+        stakingToken = IERC20(_stakingToken);
         rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
+        staking = IStaking(_stakingContract);
         lockPeriod = _lockPeriod;
 
         nextStakeId = 1;
@@ -393,12 +408,14 @@ contract Delegate is ERC20VotesUpgradeable, OwnableUpgradeable {
     ///            locked amount, the function will return 0
     /// @param user The user address
     /// @return amount The maximum amount of assets that a user can withdraw
-    function maxWithdraw(address user) public view virtual returns (uint256) {
+    function maxWithdraw(
+        address user
+    ) public view virtual returns (uint256 amount) {
         uint256 shares = balanceOf(user);
         require(shares > 0, UserHasNoShares());
 
         uint256 assets = convertToAssets(shares);
-        uint256 locked = totalLocked[keyper] - unlockedAmount;
+        uint256 locked = totalLocked[user];
 
         // need the first branch as convertToAssets rounds down
         amount = locked >= assets ? 0 : assets - locked;
