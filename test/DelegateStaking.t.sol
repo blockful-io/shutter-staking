@@ -145,7 +145,7 @@ contract Initializer is DelegateStakingTest {
     function test_Initialize() public view {
         assertEq(
             IERC20Metadata(address(delegate)).name(),
-            "Delegated Staking dSHU"
+            "Delegated Staking SHU"
         );
         assertEq(IERC20Metadata(address(delegate)).symbol(), "dSHU");
         assertEq(delegate.owner(), address(this), "Wrong owner");
