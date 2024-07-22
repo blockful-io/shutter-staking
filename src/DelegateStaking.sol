@@ -56,7 +56,7 @@ contract DelegateStaking is ERC20VotesUpgradeable, OwnableUpgradeable {
     /// @notice the stake struct
     /// @dev timestamp is the time the stake was made
     struct Stake {
-        uint256 keyper;
+        address keyper;
         uint256 amount;
         uint256 timestamp;
         uint256 lockPeriod;
@@ -205,6 +205,7 @@ contract DelegateStaking is ERC20VotesUpgradeable, OwnableUpgradeable {
         stakeId = nextStakeId++;
 
         // Add the stake to the stakes mapping
+        stakes[stakeId].keyper = keyper;
         stakes[stakeId].amount = amount;
         stakes[stakeId].timestamp = block.timestamp;
         stakes[stakeId].lockPeriod = lockPeriod;
@@ -213,7 +214,7 @@ contract DelegateStaking is ERC20VotesUpgradeable, OwnableUpgradeable {
         userStakes[user].add(stakeId);
 
         // Lock the SHU in the contract
-        stakingToken.safeTransferFrom(keyper, address(this), amount);
+        stakingToken.safeTransferFrom(user, address(this), amount);
 
         emit Staked(user, keyper, amount, lockPeriod);
     }

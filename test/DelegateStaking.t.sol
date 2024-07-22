@@ -80,6 +80,10 @@ contract DelegateStakingTest is Test {
         govToken.transfer(address(rewardsDistributor), 100_000_000e18);
     }
 
+    function _setKeyper(address _keyper, bool _isKeyper) internal {
+        staking.setKeyper(_keyper, _isKeyper);
+    }
+
     function _jumpAhead(uint256 _seconds) public {
         vm.warp(vm.getBlockTimestamp() + _seconds);
     }
@@ -180,5 +184,30 @@ contract Initializer is DelegateStakingTest {
             address(staking),
             LOCK_PERIOD
         );
+    }
+}
+
+contract Stake is DelegateStakingTest {
+    function testFuzz_ReturnStakeIdWhenStaking(
+        address _depositor,
+        address _keyper,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        vm.assume(_depositor != address(0));
+
+        vm.startPrank(_depositor);
+        govToken.approve(address(delegate), _amount);
+
+        uint256 expectedStakeId = delegate.exposed_nextStakeId();
+
+        uint256 stakeId = delegate.stake(_keyper, _amount);
+
+        assertEq(stakeId, expectedStakeId, "Wrong stake id");
+        vm.stopPrank();
     }
 }
