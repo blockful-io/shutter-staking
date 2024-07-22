@@ -8,6 +8,7 @@ import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Staking} from "src/Staking.sol";
+import {BaseStaking} from "src/BaseStaking.sol";
 import {RewardsDistributor} from "src/RewardsDistributor.sol";
 import {IRewardsDistributor} from "src/interfaces/IRewardsDistributor.sol";
 import {MockGovToken} from "test/mocks/MockGovToken.sol";
@@ -869,7 +870,7 @@ contract ClaimRewards is StakingTest {
 
         vm.prank(_depositor);
         vm.expectEmit(true, true, false, false);
-        emit Staking.RewardsClaimed(
+        emit BaseStaking.RewardsClaimed(
             _depositor,
             REWARD_RATE * (vm.getBlockTimestamp() - timestampBefore)
         );
@@ -1119,7 +1120,7 @@ contract ClaimRewards is StakingTest {
 
         vm.prank(_depositor);
 
-        vm.expectRevert(Staking.NoRewardsToClaim.selector);
+        vm.expectRevert(BaseStaking.NoRewardsToClaim.selector);
         staking.claimRewards(0);
     }
 
@@ -1130,7 +1131,7 @@ contract ClaimRewards is StakingTest {
         );
 
         vm.prank(_depositor);
-        vm.expectRevert(Staking.UserHasNoShares.selector);
+        vm.expectRevert(BaseStaking.UserHasNoShares.selector);
         staking.claimRewards(0);
     }
 
@@ -1160,7 +1161,7 @@ contract ClaimRewards is StakingTest {
         _stake(_depositor2, _amount2);
 
         vm.prank(_depositor2);
-        vm.expectRevert(Staking.NoRewardsToClaim.selector);
+        vm.expectRevert(BaseStaking.NoRewardsToClaim.selector);
         staking.claimRewards(0);
     }
 }
@@ -1340,7 +1341,7 @@ contract Unstake is StakingTest {
 
         assertEq(govToken.balanceOf(_depositor), _amount * 2, "Wrong balance");
 
-        uint256[] memory stakeIds = staking.getKeyperStakeIds(_depositor);
+        uint256[] memory stakeIds = staking.getUserStakeIds(_depositor);
         assertEq(stakeIds.length, 0, "Wrong stake ids");
     }
 
@@ -1410,7 +1411,7 @@ contract Unstake is StakingTest {
 
         assertEq(govToken.balanceOf(_depositor), _amount2, "Wrong balance");
 
-        uint256[] memory stakeIds = staking.getKeyperStakeIds(_depositor);
+        uint256[] memory stakeIds = staking.getUserStakeIds(_depositor);
         assertEq(stakeIds.length, 1, "Wrong stake ids");
 
         (uint256 amount, , ) = staking.stakes(stakeIds[0]);
@@ -1487,7 +1488,7 @@ contract Unstake is StakingTest {
         _jumpAhead(vm.getBlockTimestamp() + LOCK_PERIOD);
 
         vm.prank(depositor);
-        vm.expectRevert(Staking.WithdrawAmountTooHigh.selector);
+        vm.expectRevert(BaseStaking.WithdrawAmountTooHigh.selector);
         staking.unstake(depositor, stakeId, MIN_STAKE);
     }
 
@@ -1530,7 +1531,7 @@ contract Unstake is StakingTest {
         uint256 stakeId = _stake(_depositor, _amount);
 
         vm.prank(_depositor);
-        vm.expectRevert(Staking.WithdrawAmountTooHigh.selector);
+        vm.expectRevert(BaseStaking.WithdrawAmountTooHigh.selector);
         staking.unstake(_depositor, stakeId, _amount + 1);
     }
 
@@ -1574,7 +1575,7 @@ contract OwnableFunctions is StakingTest {
         );
 
         vm.expectEmit();
-        emit Staking.NewRewardsDistributor(_newRewardsDistributor);
+        emit BaseStaking.NewRewardsDistributor(_newRewardsDistributor);
         staking.setRewardsDistributor(_newRewardsDistributor);
 
         assertEq(
@@ -1586,7 +1587,7 @@ contract OwnableFunctions is StakingTest {
 
     function testFuzz_setLockPeriod(uint256 _newLockPeriod) public {
         vm.expectEmit();
-        emit Staking.NewLockPeriod(_newLockPeriod);
+        emit BaseStaking.NewLockPeriod(_newLockPeriod);
         staking.setLockPeriod(_newLockPeriod);
 
         assertEq(staking.lockPeriod(), _newLockPeriod, "Wrong lock period");
@@ -1700,7 +1701,7 @@ contract ViewFunctions is StakingTest {
     function testFuzz_Revertif_MaxWithdrawDepositorHasNoStakes(
         address _depositor
     ) public {
-        vm.expectRevert(Staking.UserHasNoShares.selector);
+        vm.expectRevert(BaseStaking.UserHasNoShares.selector);
         staking.maxWithdraw(_depositor);
     }
 
@@ -1828,7 +1829,7 @@ contract ViewFunctions is StakingTest {
         uint256 stakeId1 = _stake(_depositor, _amount1);
         uint256 stakeId2 = _stake(_depositor, _amount2);
 
-        uint256[] memory stakeIds = staking.getKeyperStakeIds(_depositor);
+        uint256[] memory stakeIds = staking.getUserStakeIds(_depositor);
 
         assertEq(stakeIds.length, 2, "Wrong stake ids");
         assertEq(stakeIds[0], stakeId1, "Wrong stake id");
@@ -1849,7 +1850,7 @@ contract Transfer is StakingTest {
 
         _stake(_from, _amount);
 
-        vm.expectRevert(Staking.TransferDisabled.selector);
+        vm.expectRevert(BaseStaking.TransferDisabled.selector);
         staking.transfer(_to, _amount);
     }
 
@@ -1865,7 +1866,7 @@ contract Transfer is StakingTest {
 
         _stake(_from, _amount);
 
-        vm.expectRevert(Staking.TransferDisabled.selector);
+        vm.expectRevert(BaseStaking.TransferDisabled.selector);
         staking.transferFrom(_from, _to, _amount);
     }
 }

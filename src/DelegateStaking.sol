@@ -73,7 +73,7 @@ contract DelegateStaking is ERC20VotesUpgradeable, OwnableUpgradeable {
     mapping(address user => EnumerableSet.UintSet stakeIds) private userStakes;
 
     /// @notice how many SHU a user has locked
-    mapping(address keyper => uint256 totalLocked) public totalLocked;
+    mapping(address user => uint256 totalLocked) public totalLocked;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -183,7 +183,7 @@ contract DelegateStaking is ERC20VotesUpgradeable, OwnableUpgradeable {
     /// @notice Stake SHU
     ///          - amount will be locked in the contract for the lock period
     ///          - user must approve the contract to spend the SHU before staking
-    ///          - this function will mint sdSHU to the keyper
+    ///          - this function will mint dSHU to the keyper
     ////         - dSHU is non-transferable
     /// @param amount The amount of SHU to stake
     /// @return stakeId The index of the stake
