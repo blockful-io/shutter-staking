@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
+import {EnumerableSetLib} from "@solady/utils/EnumerableSetLib.sol";
 
 import {BaseStaking} from "./BaseStaking.sol";
 import {SafeTransferLib} from "./libraries/SafeTransferLib.sol";
@@ -16,8 +16,7 @@ contract Staking is BaseStaking {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
-
-    using EnumerableSet for EnumerableSet.UintSet;
+    using EnumerableSetLib for EnumerableSetLib.Uint256Set;
 
     using SafeTransferLib for IERC20;
 
@@ -44,9 +43,6 @@ contract Staking is BaseStaking {
     /*//////////////////////////////////////////////////////////////
                                 MAPPINGS
     //////////////////////////////////////////////////////////////*/
-
-    // @notice stake ids belonging to a user
-    mapping(address user => EnumerableSet.UintSet stakeIds) internal userStakes;
 
     /// @notice stores the metadata associated with a given stake
     mapping(uint256 id => Stake _stake) public stakes;
@@ -149,7 +145,7 @@ contract Staking is BaseStaking {
         address keyper = msg.sender;
 
         // Get the keyper stakes
-        EnumerableSet.UintSet storage stakesIds = userStakes[keyper];
+        EnumerableSetLib.Uint256Set storage stakesIds = userStakes[keyper];
 
         // If the keyper has no stakes, the first stake must be at least the minimum stake
         if (stakesIds.length() == 0) {
@@ -298,7 +294,7 @@ contract Staking is BaseStaking {
     }
 
     /*//////////////////////////////////////////////////////////////
-                              VIEW FUNCTIONS
+                                OVERRIDE
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Get the maximum amount of assets that a keyper can withdraw
@@ -311,13 +307,6 @@ contract Staking is BaseStaking {
         address keyper
     ) public view override returns (uint256) {
         return _maxWithdraw(keyper, 0);
-    }
-
-    /// @notice Get the stake ids belonging to a user
-    function getUserStakeIds(
-        address user
-    ) external view returns (uint256[] memory) {
-        return userStakes[user].values();
     }
 
     /*//////////////////////////////////////////////////////////////

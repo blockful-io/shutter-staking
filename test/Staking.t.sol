@@ -4,7 +4,7 @@ pragma solidity 0.8.26;
 import "@forge-std/Test.sol";
 
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
+import {FixedPointMathLib} from "src/libraries/FixedPointMathLib.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Staking} from "src/Staking.sol";

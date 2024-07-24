@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
+import {EnumerableSetLib} from "@solady/utils/EnumerableSetLib.sol";
 
 import {IERC20} from "./interfaces/IERC20.sol";
 import {SafeTransferLib} from "./libraries/SafeTransferLib.sol";
@@ -18,6 +18,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
     //////////////////////////////////////////////////////////////*/
+    using EnumerableSetLib for EnumerableSetLib.Uint256Set;
 
     using SafeTransferLib for IERC20;
 
@@ -48,6 +49,10 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
 
     /// @notice how many SHU a user has locked
     mapping(address user => uint256 totalLocked) public totalLocked;
+
+    // @notice stake ids belonging to a user
+    mapping(address user => EnumerableSetLib.Uint256Set stakeIds)
+        internal userStakes;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -200,6 +205,13 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     ) public view virtual returns (uint256) {
         // sum + 1 on both sides to prevent donation attack
         return shares.mulDivDown(_totalAssets() + 1, totalSupply() + 1);
+    }
+
+    /// @notice Get the stake ids belonging to a user
+    function getUserStakeIds(
+        address user
+    ) external view returns (uint256[] memory) {
+        return userStakes[user].values();
     }
 
     function maxWithdraw(address user) public view virtual returns (uint256);
