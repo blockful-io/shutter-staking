@@ -36,12 +36,12 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /// @dev only owner can change
     IRewardsDistributor public rewardsDistributor;
 
-    /// @notice Unique identifier that will be used for the next stake.
-    uint256 internal nextStakeId;
-
     /// @notice the lock period in seconds
     /// @dev only owner can change
     uint256 public lockPeriod;
+
+    /// @notice Unique identifier that will be used for the next stake.
+    uint256 internal nextStakeId;
 
     /*//////////////////////////////////////////////////////////////
                                 MAPPINGS
@@ -215,12 +215,17 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
         return userStakes[user].values();
     }
 
+    /// @notice Get the total amount of assets that a keyper can withdraw
+    /// @dev must be implemented by the child contract
     function maxWithdraw(address user) public view virtual returns (uint256);
 
     /*//////////////////////////////////////////////////////////////
                           INTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Deposit SHU into the contract
+    /// @param user The user address
+    /// @param amount The amount of SHU to deposit
     function _deposit(address user, uint256 amount) internal {
         // Calculate the amount of shares to mint
         uint256 shares = convertToShares(amount);
@@ -235,17 +240,20 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
         stakingToken.safeTransferFrom(user, address(this), amount);
     }
 
+    /// @notice Withdraw SHU from the contract
+    /// @param user The user address
+    /// @param amount The amount of SHU to withdraw
     function _withdraw(
         address user,
         uint256 amount
     ) internal returns (uint256 shares) {
         shares = previewWithdraw(amount);
 
-        // Burn the shares
-        _burn(user, shares);
-
         // Decrease the amount from the total locked
         totalLocked[user] -= amount;
+
+        // Burn the shares
+        _burn(user, shares);
 
         // Transfer the SHU to the keyper
         stakingToken.safeTransfer(user, amount);

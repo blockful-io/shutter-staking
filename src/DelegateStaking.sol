@@ -91,15 +91,6 @@ contract DelegateStaking is BaseStaking {
     /// @notice Thrown when the address is not a keyper
     error AddressIsNotAKeyper();
 
-    /*//////////////////////////////////////////////////////////////
-                                 MODIFIERS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Ensure logic contract is unusable
-    constructor() {
-        _disableInitializers();
-    }
-
     /// @notice Initialize the contract
     /// @param _owner The owner of the contract, i.e. the DAO contract address
     /// @param _stakingToken The address of the staking token, i.e. SHU
@@ -221,6 +212,12 @@ contract DelegateStaking is BaseStaking {
                          RESTRICTED FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Set the staking contract
+    ///         The staking contract is the contract that will be used to
+    ///         determine if an address is a keyper
+    /// @param _stakingContract The address of the staking contract
+    /// @dev Only the owner can call this function
+    /// @dev The staking contract must not be the zero address
     function setStakingContract(address _stakingContract) external onlyOwner {
         require(_stakingContract != address(0), AddressZero());
         staking = IStaking(_stakingContract);
