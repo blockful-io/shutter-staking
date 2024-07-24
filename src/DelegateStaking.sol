@@ -88,6 +88,9 @@ contract DelegateStaking is BaseStaking {
     /// @notice Thrown when someone try to unstake a stake that is still locked
     error StakeIsStillLocked();
 
+    /// @notice Thrown when the address is not a keyper
+    error AddressIsNotAKeyper();
+
     /*//////////////////////////////////////////////////////////////
                                  MODIFIERS
     //////////////////////////////////////////////////////////////*/
@@ -137,16 +140,14 @@ contract DelegateStaking is BaseStaking {
     ) external updateRewards returns (uint256 stakeId) {
         require(amount > 0, ZeroAmount());
 
+        require(staking.keypers(keyper), AddressIsNotAKeyper());
+
         address user = msg.sender;
 
-        // Update the keyper's SHU balance
-        totalLocked[user] += amount;
-
-        // Mint the shares
-        _mint(user, convertToShares(amount));
-
-        // Get next stake id and increment it
         stakeId = nextStakeId++;
+
+        // Add the stake id to the user stakes
+        userStakes[user].add(stakeId);
 
         // Add the stake to the stakes mapping
         stakes[stakeId].keyper = keyper;
@@ -154,11 +155,7 @@ contract DelegateStaking is BaseStaking {
         stakes[stakeId].timestamp = block.timestamp;
         stakes[stakeId].lockPeriod = lockPeriod;
 
-        // Add the stake to the keyper stakes
-        userStakes[user].add(stakeId);
-
-        // Lock the SHU in the contract
-        stakingToken.safeTransferFrom(user, address(this), amount);
+        _deposit(user, amount);
 
         emit Staked(user, keyper, amount, lockPeriod);
     }
@@ -203,17 +200,8 @@ contract DelegateStaking is BaseStaking {
             StakeIsStillLocked()
         );
 
-        // Calculates the amounf of shares to burn
-        uint256 shares = previewWithdraw(amount);
-
-        // Burn the shares
-        _burn(user, shares);
-
         // Decrease the amount from the stake
         stakes[stakeId].amount -= amount;
-
-        // Decrease the amount from the total locked
-        totalLocked[user] -= amount;
 
         // If the stake is empty, remove it
         if (stakes[stakeId].amount == 0) {
@@ -224,8 +212,7 @@ contract DelegateStaking is BaseStaking {
             userStakes[user].remove(stakeId);
         }
 
-        // Transfer the SHU to the keyper
-        stakingToken.safeTransfer(user, amount);
+        uint256 shares = _withdraw(user, amount);
 
         emit Unstaked(user, amount, shares);
     }

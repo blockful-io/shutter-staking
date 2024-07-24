@@ -142,37 +142,29 @@ contract Staking is BaseStaking {
     ) external onlyKeyper updateRewards returns (uint256 stakeId) {
         require(amount > 0, ZeroAmount());
 
-        address keyper = msg.sender;
+        address user = msg.sender;
 
         // Get the keyper stakes
-        EnumerableSetLib.Uint256Set storage stakesIds = userStakes[keyper];
+        EnumerableSetLib.Uint256Set storage stakesIds = userStakes[user];
 
         // If the keyper has no stakes, the first stake must be at least the minimum stake
         if (stakesIds.length() == 0) {
             require(amount >= minStake, FirstStakeLessThanMinStake());
         }
 
-        // Update the keyper's SHU balance
-        totalLocked[keyper] += amount;
-
-        // Mint the shares
-        _mint(keyper, convertToShares(amount));
-
-        // Get next stake id and increment it
         stakeId = nextStakeId++;
+
+        // Add the stake id to the user stakes
+        userStakes[user].add(stakeId);
 
         // Add the stake to the stakes mapping
         stakes[stakeId].amount = amount;
         stakes[stakeId].timestamp = block.timestamp;
         stakes[stakeId].lockPeriod = lockPeriod;
 
-        // Add the stake to the keyper stakes
-        stakesIds.add(stakeId);
+        _deposit(user, amount);
 
-        // Lock the SHU in the contract
-        stakingToken.safeTransferFrom(keyper, address(this), amount);
-
-        emit Staked(keyper, amount, lockPeriod);
+        emit Staked(user, amount, lockPeriod);
     }
 
     /// @notice Unstake SHU
@@ -245,17 +237,8 @@ contract Staking is BaseStaking {
             );
         }
 
-        // Calculates the amount of shares to burn
-        uint256 shares = previewWithdraw(amount);
-
-        // Burn the shares
-        _burn(keyper, shares);
-
         // Decrease the amount from the stake
         stakes[stakeId].amount -= amount;
-
-        // Decrease the amount from the total locked
-        totalLocked[keyper] -= amount;
 
         // If the stake is empty, remove it
         if (stakes[stakeId].amount == 0) {
@@ -266,8 +249,7 @@ contract Staking is BaseStaking {
             userStakes[keyper].remove(stakeId);
         }
 
-        // Transfer the SHU to the keyper
-        stakingToken.safeTransfer(keyper, amount);
+        uint256 shares = _withdraw(keyper, amount);
 
         emit Unstaked(keyper, amount, shares);
     }

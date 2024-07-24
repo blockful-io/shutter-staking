@@ -64,6 +64,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /// @notice Emitted when the rewards distributor is changed
     event NewRewardsDistributor(address indexed rewardsDistributor);
 
+    /// @notice Emitted when the lock period is changed
     event NewLockPeriod(uint256 indexed lockPeriod);
 
     /*//////////////////////////////////////////////////////////////
@@ -219,6 +220,36 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /*//////////////////////////////////////////////////////////////
                           INTERNAL FUNCTIONS
     //////////////////////////////////////////////////////////////*/
+
+    function _deposit(address user, uint256 amount) internal {
+        // Calculate the amount of shares to mint
+        uint256 shares = convertToShares(amount);
+
+        // Update the total locked amount
+        totalLocked[user] += amount;
+
+        // Mint the shares
+        _mint(user, shares);
+
+        // Lock the SHU in the contract
+        stakingToken.safeTransferFrom(user, address(this), amount);
+    }
+
+    function _withdraw(
+        address user,
+        uint256 amount
+    ) internal returns (uint256 shares) {
+        shares = previewWithdraw(amount);
+
+        // Burn the shares
+        _burn(user, shares);
+
+        // Decrease the amount from the total locked
+        totalLocked[user] -= amount;
+
+        // Transfer the SHU to the keyper
+        stakingToken.safeTransfer(user, amount);
+    }
 
     /// @notice Get the amount of SHU staked for all keypers
     function _totalAssets() internal view virtual returns (uint256) {
