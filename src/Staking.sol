@@ -4,11 +4,11 @@ pragma solidity 0.8.26;
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
 
-import {IERC20} from "./interfaces/IERC20.sol";
+import {BaseStaking} from "./BaseStaking.sol";
 import {SafeTransferLib} from "./libraries/SafeTransferLib.sol";
 import {FixedPointMathLib} from "./libraries/FixedPointMathLib.sol";
+import {IERC20} from "./interfaces/IERC20.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
-import {BaseStaking} from "./BaseStaking.sol";
 
 /// @notice Shutter Staking Contract
 ///         Allows keypers to stake SHU for a lock period and earn rewards in exchange
