@@ -216,11 +216,29 @@ contract Stake is StakingTest {
         vm.stopPrank();
     }
 
-    // TODO
     function testFuzz_IncreaseNextStakeId(
         address _depositor,
         uint256 _amount
-    ) public {}
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_depositor, true);
+
+        vm.assume(_depositor != address(0));
+
+        uint256 nextStakeIdBefore = staking.exposed_nextStakeId();
+
+        _stake(_depositor, _amount);
+
+        uint256 nextStakeIdAfter = staking.exposed_nextStakeId();
+
+        assertEq(
+            nextStakeIdAfter - nextStakeIdBefore,
+            1,
+            "Wrong next stake id"
+        );
+    }
 
     function testFuzz_TransferTokensWhenStaking(
         address _depositor,
@@ -229,6 +247,8 @@ contract Stake is StakingTest {
         _amount = _boundToRealisticStake(_amount);
         _mintGovToken(_depositor, _amount);
         _setKeyper(_depositor, true);
+
+        assertEq(govToken.balanceOf(address(staking)), 0);
 
         _stake(_depositor, _amount);
         assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
@@ -259,7 +279,7 @@ contract Stake is StakingTest {
         vm.stopPrank();
     }
 
-    function testFuzz_UpdatesTotalSupplyWhenStaking(
+    function testFuzz_UpdateTotalSupplyWhenStaking(
         address _depositor,
         uint256 _amount
     ) public {
@@ -275,7 +295,7 @@ contract Stake is StakingTest {
         assertEq(staking.totalSupply(), _amount, "Wrong total supply");
     }
 
-    function testFuzz_UpdatesTotalSupplyWhenTwoAccountsStakes(
+    function testFuzz_UpdateTotalSupplyWhenTwoAccountsStakes(
         address _depositor1,
         address _depositor2,
         uint256 _amount1,
@@ -289,9 +309,6 @@ contract Stake is StakingTest {
 
         _setKeyper(_depositor1, true);
         _setKeyper(_depositor2, true);
-
-        vm.assume(_depositor1 != address(0));
-        vm.assume(_depositor2 != address(0));
 
         _stake(_depositor1, _amount1);
         _stake(_depositor2, _amount2);
@@ -311,8 +328,6 @@ contract Stake is StakingTest {
 
         _mintGovToken(_depositor, _amount);
         _setKeyper(_depositor, true);
-
-        vm.assume(_depositor != address(0));
 
         uint256 _shares = staking.convertToShares(_amount);
 
@@ -334,8 +349,6 @@ contract Stake is StakingTest {
 
         _mintGovToken(_depositor, _amount1 + _amount2);
         _setKeyper(_depositor, true);
-
-        vm.assume(_depositor != address(0));
 
         uint256 _shares1 = staking.convertToShares(_amount1);
 
@@ -405,6 +418,8 @@ contract Stake is StakingTest {
         vm.assume(_depositor1 != address(0));
         vm.assume(_depositor2 != address(0));
 
+        uint256 shares = staking.convertToShares(_amount);
+
         _stake(_depositor1, _amount);
         _stake(_depositor2, _amount);
 
@@ -413,6 +428,9 @@ contract Stake is StakingTest {
             staking.balanceOf(_depositor2),
             "Wrong balance"
         );
+        assertEq(staking.balanceOf(_depositor1), shares);
+        assertEq(staking.balanceOf(_depositor2), shares);
+        assertEq(staking.totalSupply(), 2 * shares);
     }
 
     function testFuzz_Depositor1ReceivesMoreShareWhenStakingBeforeDepositor2(

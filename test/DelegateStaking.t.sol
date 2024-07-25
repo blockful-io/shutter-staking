@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import "@forge-std/Test.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {FixedPointMathLib} from "src/libraries/FixedPointMathLib.sol";
 
 import {Staking} from "src/Staking.sol";
 import {DelegateStaking} from "src/DelegateStaking.sol";
@@ -14,6 +15,8 @@ import {ProxyUtils} from "test/helpers/ProxyUtils.sol";
 import {DelegateStakingHarness} from "test/helpers/DelegateStakingHarness.sol";
 
 contract DelegateStakingTest is Test {
+    using FixedPointMathLib for uint256;
+
     DelegateStakingHarness public delegate;
     IRewardsDistributor public rewardsDistributor;
     Staking public staking;
@@ -143,6 +146,29 @@ contract DelegateStakingTest is Test {
         stakeId = delegate.stake(_keyper, _amount);
         vm.stopPrank();
     }
+
+    function _previewWithdrawIncludeRewardsDistributed(
+        uint256 _amount,
+        uint256 _rewardsDistributed
+    ) internal view returns (uint256) {
+        uint256 supply = delegate.totalSupply();
+
+        uint256 assets = govToken.balanceOf(address(delegate)) +
+            _rewardsDistributed;
+        return _amount.mulDivUp(supply + 1, assets + 1);
+    }
+
+    function _convertToSharesIncludeRewardsDistributed(
+        uint256 _amount,
+        uint256 _rewardsDistributed
+    ) internal view returns (uint256) {
+        uint256 supply = delegate.totalSupply();
+
+        uint256 assets = govToken.balanceOf(address(delegate)) +
+            _rewardsDistributed;
+
+        return _amount.mulDivDown(supply + 1, assets + 1);
+    }
 }
 
 contract Initializer is DelegateStakingTest {
@@ -198,7 +224,10 @@ contract Stake is DelegateStakingTest {
         _mintGovToken(_depositor, _amount);
         _setKeyper(_keyper, true);
 
-        vm.assume(_depositor != address(0));
+        vm.assume(
+            _depositor != address(0) &&
+                _depositor != ProxyUtils.getAdminAddress(address(delegate))
+        );
 
         vm.startPrank(_depositor);
         govToken.approve(address(delegate), _amount);
@@ -209,5 +238,209 @@ contract Stake is DelegateStakingTest {
 
         assertEq(stakeId, expectedStakeId, "Wrong stake id");
         vm.stopPrank();
+    }
+
+    function testFuzz_IncreaseNextStakeId(
+        address _keyper,
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        vm.assume(
+            _depositor != address(0) &&
+                _depositor != ProxyUtils.getAdminAddress(address(delegate))
+        );
+
+        uint256 expectedStakeId = delegate.exposed_nextStakeId() + 1;
+
+        _stake(_depositor, _keyper, _amount);
+
+        assertEq(delegate.exposed_nextStakeId(), expectedStakeId);
+    }
+
+    function testFuzz_TransferTokensWhenStaking(
+        address _keyper,
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        vm.assume(
+            _depositor != address(0) &&
+                _depositor != ProxyUtils.getAdminAddress(address(delegate))
+        );
+
+        assertEq(govToken.balanceOf(address(delegate)), 0);
+
+        _stake(_depositor, _keyper, _amount);
+
+        assertEq(
+            govToken.balanceOf(_depositor),
+            0,
+            "Tokens were not transferred"
+        );
+        assertEq(
+            govToken.balanceOf(address(delegate)),
+            _amount,
+            "Tokens were not transferred"
+        );
+        vm.stopPrank();
+    }
+
+    function testFuzz_EmitAStakeEventWhenStaking(
+        address _keyper,
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        vm.assume(
+            _depositor != address(0) &&
+                _depositor != ProxyUtils.getAdminAddress(address(delegate))
+        );
+
+        vm.startPrank(_depositor);
+        govToken.approve(address(delegate), _amount);
+        vm.expectEmit();
+        emit DelegateStaking.Staked(_depositor, _keyper, _amount, LOCK_PERIOD);
+        delegate.stake(_keyper, _amount);
+        vm.stopPrank();
+    }
+
+    function testFuzz_UpdateTotalSupplyWhenStaking(
+        address _keyper,
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        vm.assume(
+            _depositor != address(0) &&
+                _depositor != ProxyUtils.getAdminAddress(address(delegate))
+        );
+
+        _stake(_depositor, _keyper, _amount);
+
+        assertEq(delegate.totalSupply(), _amount);
+    }
+
+    function testFuzz_UpdateTotalSupplyWhenTwoAccountsStakes(
+        address _keyper,
+        address _depositor1,
+        address _depositor2,
+        uint256 _amount1,
+        uint256 _amount2
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+        _amount2 = _boundToRealisticStake(_amount2);
+
+        _mintGovToken(_depositor1, _amount1);
+        _mintGovToken(_depositor2, _amount2);
+
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor1, _keyper, _amount1);
+        _stake(_depositor2, _keyper, _amount2);
+
+        assertEq(
+            delegate.totalSupply(),
+            _amount1 + _amount2,
+            "Wrong total supply"
+        );
+    }
+
+    function testFuzz_UpdateSharesWhenStaking(
+        address _keyper,
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        uint256 shares = delegate.convertToShares(_amount);
+
+        _stake(_depositor, _keyper, _amount);
+
+        assertEq(delegate.balanceOf(_depositor), shares);
+    }
+
+    function testFuzz_UpdateSharesWhenStakingTwice(
+        address _keyper,
+        address _depositor,
+        uint256 _amount1,
+        uint256 _amount2,
+        uint256 _jump
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+        _amount2 = _boundToRealisticStake(_amount2);
+
+        _jump = _boundRealisticTimeAhead(_jump);
+
+        _mintGovToken(_depositor, _amount1 + _amount2);
+        _setKeyper(_keyper, true);
+
+        uint256 _shares1 = staking.convertToShares(_amount1);
+        _stake(_depositor, _keyper, _amount1);
+
+        _jumpAhead(_jump);
+        uint256 _shares2 = _convertToSharesIncludeRewardsDistributed(
+            _amount2,
+            REWARD_RATE * _jump
+        );
+
+        _stake(_keyper, _depositor, _amount2);
+
+        // need to accept a small error due to the donation attack prevention
+        assertApproxEqAbs(
+            delegate.balanceOf(_depositor),
+            _shares1 + _shares2,
+            1e18,
+            "Wrong balance"
+        );
+    }
+
+    function testFuzz_Depositor1AndDepositor2ReceivesTheSameAmountOfSharesWhenStakingSameAmountInTheSameBlock(
+        address _keyper1,
+        address _keyper2,
+        address _depositor1,
+        address _depositor2,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor1, _amount);
+        _mintGovToken(_depositor2, _amount);
+
+        _setKeyper(_keyper1, true);
+        _setKeyper(_keyper2, true);
+
+        uint256 shares = delegate.convertToShares(_amount);
+
+        _stake(_depositor1, _keyper1, _amount);
+        _stake(_depositor2, _keyper2, _amount);
+
+        assertEq(
+            delegate.balanceOf(_depositor1),
+            delegate.balanceOf(_depositor2),
+            "Wrong balance"
+        );
+        assertEq(delegate.balanceOf(_depositor1), shares);
+        assertEq(delegate.balanceOf(_depositor2), shares);
+        assertEq(delegate.totalSupply(), 2 * shares);
     }
 }
