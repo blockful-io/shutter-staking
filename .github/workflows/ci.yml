@@ -9,7 +9,7 @@ on:
 
 env:
     FOUNDRY_PROFILE: ci
-    MAINNET_RPC_URL: ${{secrets.MAINNET_RPC_URL}}
+    MAINNET_RPC_URL: ${{ env.MAINNET_RPC_URL}}
 
 jobs:
     build:
