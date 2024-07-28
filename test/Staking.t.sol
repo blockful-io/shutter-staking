@@ -454,7 +454,7 @@ contract Stake is StakingTest {
 
         _stake(_depositor2, _amount);
 
-        assertGe(
+        assertGt(
             staking.balanceOf(_depositor1),
             staking.balanceOf(_depositor2),
             "Wrong balance"
@@ -483,7 +483,7 @@ contract Stake is StakingTest {
         );
     }
 
-    function testFuzz_trackAmountStakedWhenStaking(
+    function testFuzz_TrackAmountStakedWhenStaking(
         address _depositor,
         uint256 _amount
     ) public {
@@ -501,7 +501,7 @@ contract Stake is StakingTest {
         assertEq(amount, _amount, "Wrong amount");
     }
 
-    function testFuzz_trackTimestampWhenStaking(
+    function testFuzz_TrackTimestampWhenStaking(
         address _depositor,
         uint256 _amount
     ) public {
@@ -510,8 +510,6 @@ contract Stake is StakingTest {
         _mintGovToken(_depositor, _amount);
         _setKeyper(_depositor, true);
 
-        vm.assume(_depositor != address(0));
-
         uint256 stakeId = _stake(_depositor, _amount);
 
         (, uint256 timestamp, ) = staking.stakes(stakeId);
@@ -519,7 +517,7 @@ contract Stake is StakingTest {
         assertEq(timestamp, vm.getBlockTimestamp(), "Wrong timestamp");
     }
 
-    function testFuzz_trackLockPeriodWhenStaking(
+    function testFuzz_TrackLockPeriodWhenStaking(
         address _depositor,
         uint256 _amount
     ) public {
@@ -537,7 +535,7 @@ contract Stake is StakingTest {
         assertEq(lockPeriod, LOCK_PERIOD, "Wrong lock period");
     }
 
-    function testFuzz_trackStakeIndividuallyPerStake(
+    function testFuzz_TrackStakeIndividuallyPerStake(
         address _depositor,
         uint256 _amount1,
         uint256 _amount2
@@ -547,8 +545,6 @@ contract Stake is StakingTest {
 
         _mintGovToken(_depositor, _amount1 + _amount2);
         _setKeyper(_depositor, true);
-
-        vm.assume(_depositor != address(0) && _depositor != address(this));
 
         uint256 stakeId1 = _stake(_depositor, _amount1);
 
@@ -566,7 +562,7 @@ contract Stake is StakingTest {
         assertEq(timestamp2, vm.getBlockTimestamp(), "Wrong timestamp");
     }
 
-    function testFuzz_stakeReturnsStakeId(
+    function testFuzz_StakeReturnsStakeId(
         address _depositor,
         uint256 _amount
     ) public {
@@ -582,7 +578,7 @@ contract Stake is StakingTest {
         assertGt(stakeId, 0, "Wrong stake id");
     }
 
-    function testFuzz_increaseTotalLockedWhenStaking(
+    function testFuzz_IncreaseTotalLockedWhenStaking(
         address _depositor,
         uint256 _amount
     ) public {
@@ -736,12 +732,12 @@ contract Stake is StakingTest {
     //       );
     //   }
 
-    function test_DonationAttackNoRewards(
+    function testFuzz_DonationAttackNoRewards(
         address bob,
         address alice,
         uint256 attackSize
     ) public {
-        vm.assume(bob != alice && bob != address(0));
+        vm.assume(bob != alice);
         rewardsDistributor.removeRewardConfiguration(address(staking));
 
         attackSize = bound(attackSize, 2, 1000);
