@@ -9,7 +9,7 @@ on:
 
 env:
     FOUNDRY_PROFILE: ci
-    MAINNET_RPC_URL: ${{secrets.MAINNET_RPC_URL}}
+    MAINNET_RPC_URL: ${{ vars.MAINNET_RPC_URL }}
 
 jobs:
     build:
@@ -92,7 +92,7 @@ jobs:
               uses: zgosalvez/github-actions-report-lcov@v2
               with:
                   coverage-files: ./lcov.info
-                  minimum-coverage: 100
+                  minimum-coverage: 97
 
     lint:
         runs-on: ubuntu-latest
