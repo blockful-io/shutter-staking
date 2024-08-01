@@ -10,8 +10,27 @@ import {FixedPointMathLib} from "./libraries/FixedPointMathLib.sol";
 import {IERC20} from "./interfaces/IERC20.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
-/// @notice Shutter Staking Contract
-///         Allows keypers to stake SHU for a lock period and earn rewards in exchange
+/**
+ * @title Shutter Staking Contract - sSHU token
+ *
+ * This contract lets keypers stake their SHU tokens for a set period and earn rewards.
+ * When you stake SHU, you receive sSHU in return. sSHU is non-transferable and shows your share
+ * in the total SHU deposited in this contract.
+ *
+ * A keyper's SHU balance is calculated using:
+ *   balanceOf(keyper) * totalSupply() / totalShares()
+ *
+ * Staking, unstaking, and claiming rewards are based on shares, not the balance directly.
+ * This method ensures the balance can change over time without needing too many storage updates.
+ *
+ * Security Considerations:
+ *  Please be aware that the contract's Owner can change the minimum stake amount.
+ *  If the Owner is compromised, they could set the minimum stake amount very high,
+ *  making it impossible for keypers to unstake their SHU.
+ *  The Owner of this contract is the Shutter DAO multisig. By staking SHU, you trust
+ *  the Owner not to set the minimum stake amount to an unreasonably high value.
+ *
+ */
 contract Staking is BaseStaking {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES

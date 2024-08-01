@@ -15,8 +15,22 @@ interface IStaking {
     function keypers(address user) external returns (bool);
 }
 
-/// @notice Shutter Delegate Staking Contract
-///         Allows users to stake SHU and earn rewards in exchange.
+/**
+ * @title Shutter Delegate Staking Contract - dSHU token
+ *
+ * This contract lets users stake their SHU tokens for a set period and earn rewards.
+ * When you stake SHU, you receive dSHU in return. dSHU is non-transferable and represents
+ * your share in the total SHU deposited in this contract.
+ *
+ * A user's SHU balance is calculated as:
+ *   balanceOf(user) * totalSupply() / totalShares()
+ *
+ * When staking, you must specify a keyper address. This symbolically demonstrates your support
+ * for that keyper. The keyper address must be a valid keyper in the staking contract.
+ * Staking, unstaking, and claiming rewards are based on shares rather than the balance directly.
+ * This method ensures the balance can change over time without needing too many storage updates.
+ *
+ */
 contract DelegateStaking is BaseStaking {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
