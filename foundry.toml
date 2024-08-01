@@ -1,7 +1,7 @@
 [profile.default]
   evm_version = "paris"
   optimizer = true
-  optimizer_runs = 20
+  optimizer_runs = 100
   via_ir = true
   solc_version = "0.8.26"
   verbosity = 3
@@ -19,4 +19,8 @@
 [rpc_endpoints]
   mainnet = "${MAINNET_RPC_URL}"
   testnet = "${TESTNET_RPC_URL}"
+
+[etherscan]
+mainnet = { key = "${ETHERSCAN_MAINNET_KEY}" }
+testnet = { key = "${ETHERSCAN_MAINNET_KEY}", chain = "11155111" }
 

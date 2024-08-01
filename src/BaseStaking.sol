@@ -10,10 +10,6 @@ import {SafeTransferLib} from "./libraries/SafeTransferLib.sol";
 import {FixedPointMathLib} from "./libraries/FixedPointMathLib.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
-interface IStaking {
-    function keypers(address user) external returns (bool);
-}
-
 abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /*//////////////////////////////////////////////////////////////
                                LIBRARIES
@@ -60,9 +56,6 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
 
     /// @notice Emitted when a keyper claims rewards
     event RewardsClaimed(address indexed user, uint256 rewards);
-
-    /// @notice Emitted when the rewards distributor is changed
-    event NewRewardsDistributor(address indexed rewardsDistributor);
 
     /// @notice Emitted when the lock period is changed
     event NewLockPeriod(uint256 indexed lockPeriod);
@@ -129,7 +122,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
         require(rewards > 0, NoRewardsToClaim());
 
         // Calculates the amount of shares to burn
-        uint256 shares = previewWithdraw(rewards);
+        uint256 shares = _previewWithdraw(rewards);
 
         _burn(user, shares);
 
@@ -149,8 +142,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     ) external onlyOwner {
         require(_rewardsDistributor != address(0), AddressZero());
         rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
-
-        emit NewRewardsDistributor(_rewardsDistributor);
+        // no events for this function due to 24kb contract size limit
     }
 
     /// @notice Set the lock period
@@ -182,13 +174,6 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /*//////////////////////////////////////////////////////////////
                               VIEW FUNCTIONS
     //////////////////////////////////////////////////////////////*/
-
-    function previewWithdraw(
-        uint256 assets
-    ) public view virtual returns (uint256) {
-        // sum + 1 on both sides to prevent donation attack
-        return assets.mulDivUp(totalSupply() + 1, _totalAssets() + 1);
-    }
 
     /// @notice Get the total amount of shares the assets are worth
     /// @param assets The amount of assets
@@ -247,7 +232,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
         address user,
         uint256 amount
     ) internal returns (uint256 shares) {
-        shares = previewWithdraw(amount);
+        shares = _previewWithdraw(amount);
 
         // Decrease the amount from the total locked
         totalLocked[user] -= amount;
@@ -260,8 +245,15 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     }
 
     /// @notice Get the amount of SHU staked for all keypers
-    function _totalAssets() internal view virtual returns (uint256) {
+    function _totalAssets() internal view returns (uint256) {
         return stakingToken.balanceOf(address(this));
+    }
+
+    /// @notice Get the amount of shares that will be burned
+    /// @param assets The amount of assets
+    function _previewWithdraw(uint256 assets) internal view returns (uint256) {
+        // sum + 1 on both sides to prevent donation attack
+        return assets.mulDivUp(totalSupply() + 1, _totalAssets() + 1);
     }
 
     /// @notice Calculates the amount to withdraw
