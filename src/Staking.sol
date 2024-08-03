@@ -84,6 +84,8 @@ contract Staking is BaseStaking {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
+    /// @notice Thrown when a user has no shares
+    error UserHasNoShares();
 
     /// @notice Thrown when a non-keyper attempts a call for which only keypers are allowed
     error OnlyKeyper();

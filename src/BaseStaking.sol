@@ -71,9 +71,6 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /// @notice  Thrown when transfer/tranferFrom is called
     error TransferDisabled();
 
-    /// @notice Thrown when a user has no shares
-    error UserHasNoShares();
-
     /// @notice Thrown when a user try to claim rewards but has no rewards to
     /// claim
     error NoRewardsToClaim();

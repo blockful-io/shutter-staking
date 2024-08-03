@@ -1072,7 +1072,7 @@ contract ClaimRewards is StakingTest {
         );
 
         vm.prank(_depositor);
-        vm.expectRevert(BaseStaking.UserHasNoShares.selector);
+        vm.expectRevert(Staking.UserHasNoShares.selector);
         staking.claimRewards(0);
     }
 
@@ -1640,7 +1640,7 @@ contract ViewFunctions is StakingTest {
     function testFuzz_Revertif_MaxWithdrawDepositorHasNoStakes(
         address _depositor
     ) public {
-        vm.expectRevert(BaseStaking.UserHasNoShares.selector);
+        vm.expectRevert(Staking.UserHasNoShares.selector);
         staking.maxWithdraw(_depositor);
     }
 

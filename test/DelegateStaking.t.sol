@@ -2,6 +2,7 @@
 pragma solidity 0.8.26;
 
 import "@forge-std/Test.sol";
+import {console} from "@forge-std/console.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {FixedPointMathLib} from "src/libraries/FixedPointMathLib.sol";
@@ -42,6 +43,7 @@ contract DelegateStakingTest is Test {
 
         // deploy staking
         address stakingImpl = address(new Staking());
+        vm.label(stakingImpl, "stakingImpl");
 
         staking = Staking(
             address(
@@ -59,13 +61,14 @@ contract DelegateStakingTest is Test {
         );
 
         address delegateImpl = address(new DelegateStakingHarness());
+        vm.label(delegateImpl, "delegateImpl");
 
         delegate = DelegateStakingHarness(
             address(
                 new TransparentUpgradeableProxy(delegateImpl, address(this), "")
             )
         );
-        vm.label(address(delegate), "staking");
+        vm.label(address(delegate), "delegate");
 
         delegate.initialize(
             address(this), // owner
@@ -745,12 +748,12 @@ contract ClaimRewards is DelegateStakingTest {
         _mintGovToken(_depositor, _amount);
         _setKeyper(_keyper, true);
 
-        uint256 stakeId = _stake(_depositor, _keyper, _amount);
+        _stake(_depositor, _keyper, _amount);
 
         _jumpAhead(_jump);
 
         vm.startPrank(_depositor);
-        uint256 rewards = delegate.claimRewards(0);
+        delegate.claimRewards(0);
 
         uint256 expectedRewards = REWARD_RATE * (_jump);
 
@@ -919,4 +922,187 @@ contract ClaimRewards is DelegateStakingTest {
             "Wrong total supply"
         );
     }
+
+    function testFuzz_Depositor1GetsMoreRewardsThanDepositor2WhenStakingFirst(
+        address _keyper,
+        address _depositor1,
+        address _depositor2,
+        uint256 _amount,
+        uint256 _jump1,
+        uint256 _jump2
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump1 = _boundRealisticTimeAhead(_jump1);
+        _jump2 = _boundRealisticTimeAhead(_jump2);
+
+        vm.assume(_depositor1 != _depositor2);
+
+        _mintGovToken(_depositor1, _amount);
+        _mintGovToken(_depositor2, _amount);
+
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor1, _keyper, _amount);
+
+        _jumpAhead(_jump1);
+
+        _stake(_depositor2, _keyper, _amount);
+
+        _jumpAhead(_jump2);
+
+        vm.prank(_depositor1);
+        uint256 rewards1 = delegate.claimRewards(0);
+
+        vm.prank(_depositor2);
+        uint256 rewards2 = delegate.claimRewards(0);
+
+        assertGt(rewards1, rewards2, "Wrong rewards");
+    }
+
+    function testFuzz_DepositorsGetApproxSameRewardAmountWhenStakingSameAmountInSameBlock(
+        address _keyper,
+        address _depositor1,
+        address _depositor2,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundRealisticTimeAhead(_jump);
+
+        vm.assume(_depositor1 != _depositor2);
+
+        _mintGovToken(_depositor1, _amount);
+        _mintGovToken(_depositor2, _amount);
+
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor1, _keyper, _amount);
+
+        _stake(_depositor2, _keyper, _amount);
+
+        _jumpAhead(_jump);
+
+        vm.prank(_depositor1);
+        uint256 rewards1 = delegate.claimRewards(0);
+
+        vm.prank(_depositor2);
+        uint256 rewards2 = delegate.claimRewards(0);
+
+        assertApproxEqAbs(rewards1, rewards2, 1e18, "Wrong rewards");
+    }
+
+    function testFuzz_DepositorGetExactSpecifiedAmountWhenClaimingRewards(
+        address _keyper,
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundRealisticTimeAhead(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor, _keyper, _amount);
+
+        _jumpAhead(_jump);
+
+        uint256 expectedRewards = REWARD_RATE * _jump;
+        vm.prank(_depositor);
+        uint256 rewards = delegate.claimRewards(expectedRewards / 2);
+
+        assertEq(rewards, expectedRewards / 2, "Wrong rewards");
+    }
+
+    function testFuzz_OnlyBurnTheCorrespondedAmountOfSharesSpecifiedWhenClaimingRewards(
+        address _keyper,
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundRealisticTimeAhead(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor, _keyper, _amount);
+
+        uint256 sharesBefore = delegate.balanceOf(_depositor);
+
+        _jumpAhead(_jump);
+
+        uint256 expectedRewards = REWARD_RATE * _jump;
+        uint256 burnShares = _previewWithdrawIncludeRewardsDistributed(
+            expectedRewards / 2,
+            expectedRewards
+        );
+
+        vm.prank(_depositor);
+        delegate.claimRewards(expectedRewards / 2);
+
+        uint256 sharesAfter = delegate.balanceOf(_depositor);
+
+        assertEq(sharesBefore - sharesAfter, burnShares, "Wrong shares burned");
+    }
+
+    function testFuzz_RevertIf_NoRewardsToClaim(
+        address _keyper,
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor, _keyper, _amount);
+
+        vm.prank(_depositor);
+        vm.expectRevert(BaseStaking.NoRewardsToClaim.selector);
+        delegate.claimRewards(0);
+    }
+
+    function testFuzz_RevertIf_UserHasNoShares(address _depositor) public {
+        vm.assume(
+            _depositor != address(0) &&
+                _depositor != ProxyUtils.getAdminAddress(address(staking))
+        );
+
+        vm.prank(_depositor);
+        vm.expectRevert(DelegateStaking.UserHasNoShares.selector);
+        staking.claimRewards(0);
+    }
+
+    function testFuzz_RevertIf_NoRewardsToClaimForThatUser(
+        address _keyper,
+        address _depositor1,
+        address _depositor2,
+        uint256 _amount1,
+        uint256 _amount2,
+        uint256 _jump
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+        _amount2 = _boundToRealisticStake(_amount2);
+        _jump = _boundRealisticTimeAhead(_jump);
+
+        vm.assume(_depositor1 != _depositor2);
+
+        _mintGovToken(_depositor1, _amount1);
+        _mintGovToken(_depositor2, _amount2);
+
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor1, _keyper, _amount1);
+
+        _jumpAhead(_jump);
+
+        _stake(_depositor2, _keyper, _amount2);
+
+        vm.prank(_depositor2);
+        vm.expectRevert(BaseStaking.NoRewardsToClaim.selector);
+        delegate.claimRewards(0);
+    }
 }
+
+contract Unstake is DelegateStaking {}

@@ -89,6 +89,9 @@ contract DelegateStaking is BaseStaking {
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
 
+    /// @notice Thrown when a user has no shares
+    error UserHasNoShares();
+
     /// @notice Trown when amount is zero
     error ZeroAmount();
 
