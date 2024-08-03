@@ -454,6 +454,7 @@ contract Stake is DelegateStakingTest {
         uint256 _amount,
         uint256 _jump
     ) public {
+        vm.assume(_depositor1 != _depositor2);
         _amount = _boundToRealisticStake(_amount);
 
         _jump = _boundRealisticTimeAhead(_jump);

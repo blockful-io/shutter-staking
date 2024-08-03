@@ -844,7 +844,7 @@ contract ClaimRewards is StakingTest {
         assertApproxEqAbs(rewards, expectedRewards, 1e18, "Wrong rewards");
     }
 
-    function testFuzz_claimRewardBurnShares(
+    function testFuzz_ClaimRewardBurnShares(
         address _depositor,
         uint256 _amount,
         uint256 _jump
