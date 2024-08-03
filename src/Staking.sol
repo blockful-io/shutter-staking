@@ -115,11 +115,6 @@ contract Staking is BaseStaking {
         _;
     }
 
-    /// @notice Ensure logic contract is unusable
-    constructor() {
-        _disableInitializers();
-    }
-
     /// @notice Initialize the contract
     /// @param _owner The owner of the contract, i.e. the DAO contract address
     /// @param _stakingToken The address of the staking token, i.e. SHU

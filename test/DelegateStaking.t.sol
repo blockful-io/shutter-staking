@@ -7,6 +7,7 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {FixedPointMathLib} from "src/libraries/FixedPointMathLib.sol";
 
 import {Staking} from "src/Staking.sol";
+import {BaseStaking} from "src/BaseStaking.sol";
 import {DelegateStaking} from "src/DelegateStaking.sol";
 import {RewardsDistributor} from "src/RewardsDistributor.sol";
 import {IRewardsDistributor} from "src/interfaces/IRewardsDistributor.sol";
@@ -791,6 +792,131 @@ contract ClaimRewards is DelegateStakingTest {
             0,
             1e18,
             "Wrong balance"
+        );
+    }
+
+    function testFuzz_EmitRewardsClaimedEventWhenClaimingRewards(
+        address _keyper,
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundRealisticTimeAhead(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor, _keyper, _amount);
+
+        _jumpAhead(_jump);
+
+        vm.expectEmit(true, true, false, false);
+        emit BaseStaking.RewardsClaimed(_depositor, REWARD_RATE * _jump);
+
+        vm.prank(_depositor);
+        delegate.claimRewards(0);
+    }
+
+    function testFuzz_ClaimAllRewardsOnlyStaker(
+        address _keyper,
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundRealisticTimeAhead(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor, _keyper, _amount);
+
+        _jumpAhead(_jump);
+
+        vm.prank(_depositor);
+        uint256 rewards = delegate.claimRewards(0);
+
+        uint256 expectedRewards = REWARD_RATE * _jump;
+
+        // need to accept a small error due to the donation attack prevention
+        assertApproxEqAbs(rewards, expectedRewards, 1e18, "Wrong rewards");
+    }
+
+    function testFuzz_ClaimRewardBurnShares(
+        address _keyper,
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundRealisticTimeAhead(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor, _keyper, _amount);
+
+        uint256 sharesBefore = delegate.balanceOf(_depositor);
+
+        _jumpAhead(_jump);
+
+        uint256 expectedRewards = REWARD_RATE * _jump;
+
+        uint256 burnShares = _previewWithdrawIncludeRewardsDistributed(
+            expectedRewards,
+            expectedRewards
+        );
+
+        vm.prank(_depositor);
+        delegate.claimRewards(0);
+
+        uint256 sharesAfter = delegate.balanceOf(_depositor);
+
+        // need to accept a small error due to the donation attack prevention
+        assertApproxEqAbs(
+            sharesBefore - sharesAfter,
+            burnShares,
+            1,
+            "Wrong shares burned"
+        );
+    }
+
+    function testFuzz_UpdateTotalSupplyWhenClaimingRewards(
+        address _keyper,
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundRealisticTimeAhead(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor, _keyper, _amount);
+
+        uint256 totalSupplyBefore = delegate.totalSupply();
+
+        _jumpAhead(_jump);
+
+        uint256 expectedRewards = REWARD_RATE * _jump;
+
+        uint256 burnShares = _previewWithdrawIncludeRewardsDistributed(
+            expectedRewards,
+            expectedRewards
+        );
+
+        vm.prank(_depositor);
+        delegate.claimRewards(0);
+
+        uint256 totalSupplyAfter = delegate.totalSupply();
+
+        assertApproxEqAbs(
+            totalSupplyAfter,
+            totalSupplyBefore - burnShares,
+            1,
+            "Wrong total supply"
         );
     }
 }

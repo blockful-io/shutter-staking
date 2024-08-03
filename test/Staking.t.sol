@@ -4,9 +4,10 @@ pragma solidity 0.8.26;
 import "@forge-std/Test.sol";
 
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import {FixedPointMathLib} from "src/libraries/FixedPointMathLib.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+
+import {FixedPointMathLib} from "src/libraries/FixedPointMathLib.sol";
 import {Staking} from "src/Staking.sol";
 import {BaseStaking} from "src/BaseStaking.sol";
 import {RewardsDistributor} from "src/RewardsDistributor.sol";
@@ -439,6 +440,7 @@ contract Stake is StakingTest {
         uint256 _amount,
         uint256 _jump
     ) public {
+        vm.assume(_depositor1 != _depositor2);
         _amount = _boundToRealisticStake(_amount);
         _jump = _boundRealisticTimeAhead(_jump);
 
