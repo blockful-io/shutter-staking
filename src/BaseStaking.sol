@@ -181,6 +181,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
         uint256 assets
     ) public view virtual returns (uint256) {
         // sum + 1 on both sides to prevent donation attack
+        // this is the same as OZ ERC4626 prevetion to inflation attack with decimal offset = 0
         return assets.mulDivDown(totalSupply() + 1, _totalAssets() + 1);
     }
 
@@ -190,6 +191,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
         uint256 shares
     ) public view virtual returns (uint256) {
         // sum + 1 on both sides to prevent donation attack
+        // this is the same as OZ ERC4626 prevetion to inflation attack with decimal offset = 0
         return shares.mulDivDown(_totalAssets() + 1, totalSupply() + 1);
     }
 
@@ -214,6 +216,10 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     function _deposit(address user, uint256 amount) internal {
         // Calculate the amount of shares to mint
         uint256 shares = convertToShares(amount);
+
+        // Shares may be 0 if a first deposit donation attack occurs. Even it will not profitable for the attacker, as he will spend more tokens than he will get back
+        // this attack can still be employed to make a DDOS attack against a specific user. Although the targeted user will still be able to withdraw the SHU, this will only hold true if someone mints to increase the total supply.
+        require(shares > 0, "Shares must be greater than 0");
 
         // Update the total locked amount
         totalLocked[user] += amount;
@@ -253,6 +259,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /// @param assets The amount of assets
     function _previewWithdraw(uint256 assets) internal view returns (uint256) {
         // sum + 1 on both sides to prevent donation attack
+        // this is the same as OZ ERC4626 prevetion to inflation attack with decimal offset = 0
         return assets.mulDivUp(totalSupply() + 1, _totalAssets() + 1);
     }
 

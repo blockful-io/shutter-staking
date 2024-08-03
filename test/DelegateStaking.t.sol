@@ -138,7 +138,8 @@ contract DelegateStakingTest is Test {
                 _user != address(this) &&
                 _user != address(delegate) &&
                 _user != ProxyUtils.getAdminAddress(address(delegate)) &&
-                _user != address(rewardsDistributor)
+                _user != address(rewardsDistributor) &&
+                _user != address(staking)
         );
 
         vm.startPrank(_user);
