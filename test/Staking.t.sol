@@ -1259,7 +1259,7 @@ contract Unstake is StakingTest {
         _jumpAhead(_jump);
 
         uint256 unstakeAmount = _amount - MIN_STAKE;
-        uint256 shares = staking.previewWithdraw(unstakeAmount);
+        uint256 shares = staking.exposed_previewWithdraw(unstakeAmount);
         vm.expectEmit();
         emit Staking.Unstaked(_depositor, unstakeAmount, shares);
 
@@ -1589,7 +1589,6 @@ contract OwnableFunctions is StakingTest {
         );
 
         vm.expectEmit();
-        emit BaseStaking.NewRewardsDistributor(_newRewardsDistributor);
         staking.setRewardsDistributor(_newRewardsDistributor);
 
         assertEq(

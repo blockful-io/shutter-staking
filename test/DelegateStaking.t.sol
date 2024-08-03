@@ -651,59 +651,63 @@ contract Stake is DelegateStakingTest {
         delegate.stake(_keyper, 0);
     }
 
-    // function test_DonationAttackNoRewards(
-    //     address keyper,
-    //     address bob,
-    //     address alice,
-    //     uint256 bobAmount
-    // ) public {
-    //     vm.assume(bob != alice);
-    //     rewardsDistributor.removeRewardConfiguration(address(delegate));
+    function test_DonationAttackNoRewards(
+        address keyper,
+        address bob,
+        address alice,
+        uint256 bobAmount
+    ) public {
+        vm.assume(bob != alice);
+        rewardsDistributor.removeRewardConfiguration(address(delegate));
 
-    //     _setKeyper(keyper, true);
+        _setKeyper(keyper, true);
 
-    //     bobAmount = _boundToRealisticStake(bobAmount);
+        bobAmount = _boundToRealisticStake(bobAmount);
 
-    //     // alice deposits 1
-    //     _mintGovToken(alice, 1);
-    //     uint256 aliceStakeId = _stake(alice, keyper, 1);
+        // alice deposits 1
+        _mintGovToken(alice, 1);
+        _stake(alice, keyper, 1);
 
-    //     // simulate donation
-    //     govToken.mint(address(delegate), bobAmount);
+        // simulate donation
+        govToken.mint(address(delegate), bobAmount);
 
-    //     // bob stake
-    //     _mintGovToken(bob, bobAmount);
-    //     uint256 bobStakeId = _stake(bob, keyper, bobAmount);
+        // bob stake
+        _mintGovToken(bob, bobAmount);
+        uint256 bobStakeId = _stake(bob, keyper, bobAmount);
 
-    //     _jumpAhead(vm.getBlockTimestamp() + LOCK_PERIOD);
+        _jumpAhead(vm.getBlockTimestamp() + LOCK_PERIOD);
 
-    //     // alice withdraw rewards (bob stake) even when there is no rewards distributed
-    //     vm.startPrank(alice);
-    //     //delegate.unstake(aliceStakeId, 0);
-    //     delegate.claimRewards(0);
-    //     vm.stopPrank();
+        // alice withdraw rewards (bob stake) even when there is no rewards distributed
+        vm.startPrank(alice);
+        //delegate.unstake(aliceStakeId, 0);
+        uint256 aliceRewards = delegate.claimRewards(0);
+        vm.stopPrank();
 
-    //     uint256 aliceBalanceAfterAttack = govToken.balanceOf(alice);
+        uint256 aliceBalanceAfterAttack = govToken.balanceOf(alice);
 
-    //     // attack should not be profitable for alice
-    //     assertGtDecimal(
-    //         bobAmount + 1, // amount alice has spend in total
-    //         aliceBalanceAfterAttack,
-    //         1e18,
-    //         "Alice receive more than expend for the attack"
-    //     );
+        // attack should not be profitable for alice
+        assertGtDecimal(
+            bobAmount + 1, // amount alice has spend in total
+            aliceBalanceAfterAttack,
+            1e18,
+            "Alice receive more than expend for the attack"
+        );
 
-    //     vm.startPrank(bob);
-    //     delegate.unstake(bobStakeId, 0);
-    //     delegate.claimRewards(0);
+        // as previewWithdraw rounds up, someone needs to stake again to have a dSHU total supply > 1
+        // so bob can unstake
+        _mintGovToken(bob, aliceRewards + 10e18);
+        _stake(bob, keyper, aliceRewards + 10e18);
 
-    //     uint256 bobBalanceAfterAttack = govToken.balanceOf(bob);
+        vm.prank(bob);
+        delegate.unstake(bobStakeId, 0);
 
-    //     // at the end Alice still earn less than bob
-    //     assertGt(
-    //         bobBalanceAfterAttack,
-    //         aliceBalanceAfterAttack,
-    //         "Alice earn more than Bob after the attack"
-    //     );
-    // }
+        uint256 bobBalanceAfterAttack = govToken.balanceOf(bob);
+
+        // Alice earn less than bob
+        assertGt(
+            bobBalanceAfterAttack,
+            aliceBalanceAfterAttack,
+            "Alice earn more than Bob after the attack"
+        );
+    }
 }
