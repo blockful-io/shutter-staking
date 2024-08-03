@@ -711,4 +711,84 @@ contract Stake is DelegateStakingTest {
             "Alice earn more than Bob after the attack"
         );
     }
+
+    function testFuzz_KeyperCanDelegateToHimself(
+        address _keyper,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_keyper, _amount);
+        _setKeyper(_keyper, true);
+
+        uint256 stakeId = _stake(_keyper, _keyper, _amount);
+
+        (address keyper, , , ) = delegate.stakes(stakeId);
+
+        assertEq(keyper, _keyper, "Wrong keyper");
+    }
+}
+
+contract ClaimRewards is DelegateStakingTest {
+    function testFuzz_UpdateStakerGovTokenBalanceWhenClaimingRewards(
+        address _keyper,
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundRealisticTimeAhead(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        uint256 stakeId = _stake(_depositor, _keyper, _amount);
+
+        _jumpAhead(_jump);
+
+        vm.startPrank(_depositor);
+        uint256 rewards = delegate.claimRewards(0);
+
+        uint256 expectedRewards = REWARD_RATE * (_jump);
+
+        // need to accept a small error due to the donation attack prevention
+        assertApproxEqAbs(
+            govToken.balanceOf(_depositor),
+            expectedRewards,
+            1e18,
+            "Wrong balance"
+        );
+    }
+
+    function testFuzz_GovTokenBalanceUnchangedWhenClaimingRewardsOnlyStaker(
+        address _keyper,
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundRealisticTimeAhead(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor, _keyper, _amount);
+
+        uint256 contractBalanceBefore = govToken.balanceOf(address(delegate));
+
+        _jumpAhead(_jump);
+
+        vm.prank(_depositor);
+        delegate.claimRewards(0);
+
+        uint256 contractBalanceAfter = govToken.balanceOf(address(delegate));
+
+        // small percentage lost to the vault due to the donation attack prevention
+        assertApproxEqAbs(
+            contractBalanceAfter - contractBalanceBefore,
+            0,
+            1e18,
+            "Wrong balance"
+        );
+    }
 }
