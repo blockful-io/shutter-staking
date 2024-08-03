@@ -423,6 +423,7 @@ contract Stake is DelegateStakingTest {
         address _depositor2,
         uint256 _amount
     ) public {
+        vm.assume(_depositor1 != _depositor2);
         _amount = _boundToRealisticStake(_amount);
 
         _mintGovToken(_depositor1, _amount);
