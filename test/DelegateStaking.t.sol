@@ -1511,3 +1511,54 @@ contract OwnableFunctions is DelegateStakingTest {
         delegate.setStakingContract(_newStaking);
     }
 }
+
+contract ViewFunctions is DelegateStakingTest {
+    function testFuzz_Revertif_MaxWithdrawDepositorHasNoStakes(
+        address _depositor
+    ) public {
+        vm.expectRevert(DelegateStaking.UserHasNoShares.selector);
+        delegate.maxWithdraw(_depositor);
+    }
+
+    function testFuzz_MaxWithdrawDepositorHasLockedStakeNoRewards(
+        address _keyper,
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor, _keyper, _amount);
+
+        uint256 maxWithdraw = delegate.maxWithdraw(_depositor);
+        assertEq(maxWithdraw, 0, "Wrong max withdraw");
+    }
+
+    function testFuzz_MaxWithdrawDepositorHasLockedStakeAndReward(
+        address _keyper,
+        address _depositor1,
+        uint256 _amount1,
+        uint256 _jump
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor1, _amount1);
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor1, _keyper, _amount1);
+
+        _jumpAhead(_jump);
+
+        rewardsDistributor.collectRewardsTo(address(delegate));
+
+        uint256 rewards = REWARD_RATE * _jump;
+
+        uint256 maxWithdraw = delegate.maxWithdraw(_depositor1);
+
+        assertApproxEqAbs(maxWithdraw, rewards, 0.1e18, "Wrong max withdraw");
+    }
+}
