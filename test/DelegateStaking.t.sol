@@ -4,7 +4,9 @@ pragma solidity 0.8.26;
 import "@forge-std/Test.sol";
 import {console} from "@forge-std/console.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+
 import {FixedPointMathLib} from "src/libraries/FixedPointMathLib.sol";
 
 import {Staking} from "src/Staking.sol";
@@ -1386,11 +1388,11 @@ contract Unstake is DelegateStakingTest {
 
         vm.prank(_depositor);
         vm.expectRevert(BaseStaking.WithdrawAmountTooHigh.selector);
-        staking.unstake(stakeId, _amount + 1);
+        delegate.unstake(stakeId, _amount + 1);
     }
 }
 
-contract OwnableFunctions is DelegateStaking {
+contract OwnableFunctions is DelegateStakingTest {
     function testFuzz_setRewardsDistributor(
         address _newRewardsDistributor
     ) public {
@@ -1407,5 +1409,105 @@ contract OwnableFunctions is DelegateStaking {
             _newRewardsDistributor,
             "Wrong rewards distributor"
         );
+    }
+
+    function testFuzz_setLockPeriod(uint256 _newLockPeriod) public {
+        vm.expectEmit();
+
+        emit BaseStaking.NewLockPeriod(_newLockPeriod);
+
+        delegate.setLockPeriod(_newLockPeriod);
+
+        assertEq(delegate.lockPeriod(), _newLockPeriod, "Wrong lock period");
+    }
+
+    function testFuzz_setStakingContract(address _newStaking) public {
+        vm.assume(
+            _newStaking != address(0) &&
+                _newStaking != address(delegate) &&
+                _newStaking != address(govToken)
+        );
+
+        vm.expectEmit();
+        emit DelegateStaking.NewStakingContract(_newStaking);
+        delegate.setStakingContract(_newStaking);
+
+        assertEq(
+            address(delegate.staking()),
+            _newStaking,
+            "Wrong staking contract"
+        );
+    }
+
+    function testFuzz_RevertIf_NonOwnerSetRewardsDistributor(
+        address _newRewardsDistributor,
+        address _nonOwner
+    ) public {
+        vm.assume(
+            _newRewardsDistributor != address(0) &&
+                _newRewardsDistributor != address(delegate) &&
+                _newRewardsDistributor != address(govToken)
+        );
+
+        vm.assume(
+            _nonOwner != address(0) &&
+                _nonOwner != ProxyUtils.getAdminAddress(address(delegate)) &&
+                _nonOwner != address(this)
+        );
+
+        vm.prank(_nonOwner);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                _nonOwner
+            )
+        );
+        delegate.setRewardsDistributor(_newRewardsDistributor);
+    }
+
+    function testFuzz_RevertIf_NonOwnerSetLockPeriod(
+        uint256 _newLockPeriod,
+        address _nonOwner
+    ) public {
+        vm.assume(
+            _nonOwner != address(0) &&
+                _nonOwner != ProxyUtils.getAdminAddress(address(delegate)) &&
+                _nonOwner != address(this)
+        );
+
+        vm.prank(_nonOwner);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                _nonOwner
+            )
+        );
+        delegate.setLockPeriod(_newLockPeriod);
+    }
+
+    function testFuzz_RevertIf_NonOwnerSetStakingContract(
+        address _newStaking,
+        address _nonOwner
+    ) public {
+        vm.assume(
+            _newStaking != address(0) &&
+                _newStaking != address(delegate) &&
+                _newStaking != address(govToken)
+        );
+
+        vm.assume(
+            _nonOwner != address(0) &&
+                _nonOwner != ProxyUtils.getAdminAddress(address(delegate)) &&
+                _nonOwner != address(this)
+        );
+
+        vm.prank(_nonOwner);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                Ownable.OwnableUnauthorizedAccount.selector,
+                _nonOwner
+            )
+        );
+        delegate.setStakingContract(_newStaking);
     }
 }
