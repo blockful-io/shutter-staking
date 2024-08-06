@@ -1105,4 +1105,307 @@ contract ClaimRewards is DelegateStakingTest {
     }
 }
 
-contract Unstake is DelegateStaking {}
+contract Unstake is DelegateStakingTest {
+    function testFuzz_UnstakeUpdateStakerGovTokenBalanceWhenUnstaking(
+        address _keyper,
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        uint256 stakeId = _stake(_depositor, _keyper, _amount);
+
+        _jumpAhead(_jump);
+
+        vm.prank(_depositor);
+        delegate.unstake(stakeId, 0);
+
+        assertEq(govToken.balanceOf(_depositor), _amount, "Wrong balance");
+    }
+
+    function testFuzz_UpdateTotalSupplyWhenUnstaking(
+        address _keyper,
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        uint256 stakeId = _stake(_depositor, _keyper, _amount);
+
+        uint256 totalSupplyBefore = delegate.totalSupply();
+
+        _jumpAhead(_jump);
+
+        uint256 expectedRewards = REWARD_RATE * _jump;
+
+        uint256 sharesToBurn = _previewWithdrawIncludeRewardsDistributed(
+            _amount,
+            expectedRewards
+        );
+
+        vm.prank(_depositor);
+        delegate.unstake(stakeId, 0);
+
+        assertEq(
+            delegate.totalSupply(),
+            totalSupplyBefore - sharesToBurn,
+            "Wrong total supply"
+        );
+
+        uint256 expectedSharesRemaining = delegate.convertToShares(
+            expectedRewards
+        );
+
+        assertEq(delegate.totalSupply(), expectedSharesRemaining);
+    }
+
+    function testFuzz_UnstakeShouldNotTransferRewards(
+        address _keyper,
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        uint256 stakeId = _stake(_depositor, _keyper, _amount);
+
+        _jumpAhead(_jump);
+
+        uint256 expectedRewards = REWARD_RATE * _jump;
+
+        vm.prank(_depositor);
+        uint256 unstakeAmount = delegate.unstake(stakeId, 0);
+
+        assertEq(
+            govToken.balanceOf(address(delegate)),
+            expectedRewards,
+            "Wrong balance"
+        );
+        assertEq(
+            govToken.balanceOf(_depositor),
+            unstakeAmount,
+            "Wrong balance"
+        );
+    }
+
+    function testFuzz_EmitUnstakeEventWhenUnstaking(
+        address _keyper,
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        uint256 stakeId = _stake(_depositor, _keyper, _amount);
+
+        _jumpAhead(_jump);
+
+        uint256 shares = _previewWithdrawIncludeRewardsDistributed(
+            _amount,
+            REWARD_RATE * _jump
+        );
+        vm.expectEmit();
+        emit Staking.Unstaked(_depositor, _amount, shares);
+
+        vm.prank(_depositor);
+        delegate.unstake(stakeId, 0);
+    }
+
+    function testFuzz_DepositorHasMultipleStakesUnstakeCorrectStake(
+        address _keyper,
+        address _depositor,
+        uint256 _amount1,
+        uint256 _amount2,
+        uint256 _jump
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+        _amount2 = _boundToRealisticStake(_amount2);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount1 + _amount2);
+        _setKeyper(_keyper, true);
+
+        uint256 stakeId1 = _stake(_depositor, _keyper, _amount1);
+        uint256 stakeId2 = _stake(_depositor, _keyper, _amount2);
+        assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
+
+        _jumpAhead(_jump);
+
+        vm.prank(_depositor);
+        delegate.unstake(stakeId1, 0);
+
+        assertEq(govToken.balanceOf(_depositor), _amount1, "Wrong balance");
+
+        vm.prank(_depositor);
+        delegate.unstake(stakeId2, 0);
+
+        assertEq(
+            govToken.balanceOf(_depositor),
+            _amount1 + _amount2,
+            "Wrong balance"
+        );
+    }
+
+    function testFuzz_UnstakeOnlyAmountSpecified(
+        address _keyper,
+        address _depositor,
+        uint256 _amount1,
+        uint256 _amount2,
+        uint256 _jump
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+        _amount2 = _boundToRealisticStake(_amount2);
+        _jump = _boundUnlockedTime(_jump);
+
+        vm.assume(_amount1 > _amount2);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount1);
+
+        _setKeyper(_keyper, true);
+
+        uint256 stakeId = _stake(_depositor, _keyper, _amount1);
+        assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
+
+        _jumpAhead(_jump);
+
+        vm.prank(_depositor);
+        delegate.unstake(stakeId, _amount2);
+
+        assertEq(govToken.balanceOf(_depositor), _amount2, "Wrong balance");
+
+        uint256[] memory stakeIds = delegate.getUserStakeIds(_depositor);
+        assertEq(stakeIds.length, 1, "Wrong stake ids");
+
+        (, uint256 amount, , ) = delegate.stakes(stakeIds[0]);
+
+        assertEq(amount, _amount1 - _amount2, "Wrong amount");
+    }
+
+    function testFuzz_RevertIf_StakeIsStillLocked(
+        address _keyper,
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = bound(_jump, vm.getBlockTimestamp(), LOCK_PERIOD);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        uint256 stakeId = _stake(_depositor, _keyper, _amount);
+
+        _jumpAhead(_jump);
+
+        vm.prank(_depositor);
+        vm.expectRevert(DelegateStaking.StakeIsStillLocked.selector);
+        delegate.unstake(stakeId, 0);
+    }
+
+    function testFuzz_RevertIf_StakeIsStillLockedAfterLockPeriodChangedToLessThanCurrent(
+        address _keyper,
+        address _depositor,
+        uint256 _amount,
+        uint256 _jump
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+        _jump = bound(_jump, vm.getBlockTimestamp(), LOCK_PERIOD - 1);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        uint256 stakeId = _stake(_depositor, _keyper, _amount);
+
+        delegate.setLockPeriod(_jump);
+
+        _jumpAhead(_jump);
+
+        vm.prank(_depositor);
+        vm.expectRevert(DelegateStaking.StakeIsStillLocked.selector);
+        delegate.unstake(stakeId, 0);
+    }
+
+    function testFuzz_RevertIf_StakeDoesNotBelongToUser(
+        address _keyper,
+        address _depositor1,
+        address _depositor2,
+        uint256 _amount1
+    ) public {
+        vm.assume(_depositor1 != _depositor2);
+        vm.assume(
+            _depositor1 != address(0) &&
+                _depositor1 != ProxyUtils.getAdminAddress(address(delegate))
+        );
+        vm.assume(
+            _depositor2 != address(0) &&
+                _depositor2 != ProxyUtils.getAdminAddress(address(delegate))
+        );
+        _amount1 = _boundToRealisticStake(_amount1);
+
+        _mintGovToken(_depositor1, _amount1);
+
+        _setKeyper(_keyper, true);
+
+        uint256 stakeId = _stake(_depositor1, _keyper, _amount1);
+
+        vm.prank(_depositor2);
+        vm.expectRevert(DelegateStaking.StakeDoesNotBelongToUser.selector);
+        delegate.unstake(stakeId, 0);
+    }
+
+    function testFuzz_RevertIf_AmountGreaterThanStakeAmount(
+        address _keyper,
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        uint256 stakeId = _stake(_depositor, _keyper, _amount);
+
+        vm.prank(_depositor);
+        vm.expectRevert(BaseStaking.WithdrawAmountTooHigh.selector);
+        staking.unstake(stakeId, _amount + 1);
+    }
+}
+
+contract OwnableFunctions is DelegateStaking {
+    function testFuzz_setRewardsDistributor(
+        address _newRewardsDistributor
+    ) public {
+        vm.assume(
+            _newRewardsDistributor != address(0) &&
+                _newRewardsDistributor != address(delegate) &&
+                _newRewardsDistributor != address(govToken)
+        );
+
+        delegate.setRewardsDistributor(_newRewardsDistributor);
+
+        assertEq(
+            address(delegate.rewardsDistributor()),
+            _newRewardsDistributor,
+            "Wrong rewards distributor"
+        );
+    }
+}

@@ -99,7 +99,7 @@ contract Staking is BaseStaking {
 
     /// @notice Thrown when someone try to unstake a stake that doesn't belong
     /// to the keyper in question
-    error StakeDoesNotBelongToKeyper();
+    error StakeDoesNotBelongToUser();
 
     /// @notice Thrown when someone try to unstake a stake that doesn't exist
     error StakeDoesNotExist();
@@ -208,10 +208,10 @@ contract Staking is BaseStaking {
         address keyper,
         uint256 stakeId,
         uint256 _amount
-    ) external returns (uint256 amount) {
+    ) external updateRewards returns (uint256 amount) {
         require(
             userStakes[keyper].contains(stakeId),
-            StakeDoesNotBelongToKeyper()
+            StakeDoesNotBelongToUser()
         );
         Stake memory keyperStake = stakes[stakeId];
 

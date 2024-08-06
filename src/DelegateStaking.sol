@@ -186,7 +186,7 @@ contract DelegateStaking is BaseStaking {
     function unstake(
         uint256 stakeId,
         uint256 _amount
-    ) external returns (uint256 amount) {
+    ) external updateRewards returns (uint256 amount) {
         address user = msg.sender;
         require(userStakes[user].contains(stakeId), StakeDoesNotBelongToUser());
         Stake memory userStake = stakes[stakeId];

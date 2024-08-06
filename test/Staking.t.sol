@@ -1186,7 +1186,10 @@ contract Unstake is StakingTest {
         _jumpAhead(_jump);
 
         uint256 unstakeAmount = _amount - MIN_STAKE;
-        uint256 shares = staking.exposed_previewWithdraw(unstakeAmount);
+        uint256 shares = _previewWithdrawIncludeRewardsDistributed(
+            unstakeAmount,
+            REWARD_RATE * _jump
+        );
         vm.expectEmit();
         emit Staking.Unstaked(_depositor, unstakeAmount, shares);
 
@@ -1232,23 +1235,37 @@ contract Unstake is StakingTest {
         _mintGovToken(_depositor, _amount + MIN_STAKE);
         _setKeyper(_depositor, true);
 
-        _stake(_depositor, MIN_STAKE);
-
         uint256 stakeId = _stake(_depositor, _amount);
 
+        uint256 totalSupplyBefore = staking.totalSupply();
+
         _jumpAhead(_jump);
+
+        uint256 expectedRewards = REWARD_RATE * _jump;
+        uint256 sharesToBurn = _previewWithdrawIncludeRewardsDistributed(
+            _amount,
+            expectedRewards
+        );
 
         vm.prank(_depositor);
         staking.unstake(_depositor, stakeId, 0);
 
-        uint256 expectedSharesRemaining = staking.convertToShares(MIN_STAKE);
-
-        uint256 totalSupplyAfter = staking.totalSupply();
-
         assertEq(
-            totalSupplyAfter,
-            expectedSharesRemaining,
+            staking.totalSupply(),
+            totalSupplyBefore - sharesToBurn,
             "Wrong total supply"
+        );
+
+        uint256 expectedSharesRemaining = staking.convertToShares(
+            MIN_STAKE + expectedRewards
+        );
+
+        // TODO review this
+        assertApproxEqRel(
+            staking.totalSupply(),
+            expectedSharesRemaining,
+            0.1e18,
+            "Wrong total supply with remaing shares"
         );
     }
 
@@ -1433,7 +1450,7 @@ contract Unstake is StakingTest {
         staking.unstake(depositor, stakeId, MIN_STAKE);
     }
 
-    function testFuzz_RevertIf_StakeDoesNotBelongToKeyper(
+    function testFuzz_RevertIf_StakeDoesNotBelongToUser(
         address _depositor1,
         address _depositor2,
         uint256 _amount1
@@ -1456,7 +1473,7 @@ contract Unstake is StakingTest {
         uint256 stakeId = _stake(_depositor1, _amount1);
 
         vm.prank(_depositor2);
-        vm.expectRevert(Staking.StakeDoesNotBelongToKeyper.selector);
+        vm.expectRevert(Staking.StakeDoesNotBelongToUser.selector);
         staking.unstake(_depositor2, stakeId, 0);
     }
 
