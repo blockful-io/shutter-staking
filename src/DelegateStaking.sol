@@ -25,10 +25,17 @@ interface IStaking {
  * A user's SHU balance is calculated as:
  *   balanceOf(user) * totalSupply() / totalShares()
  *
+ * Staking, unstaking, and claiming rewards are based on shares, not the balance directly.
+ * This method ensures the balance can change over time without needing too many storage updates.
+ *
  * When staking, you must specify a keyper address. This symbolically demonstrates your support
  * for that keyper. The keyper address must be a valid keyper in the staking contract.
  * Staking, unstaking, and claiming rewards are based on shares rather than the balance directly.
  * This method ensures the balance can change over time without needing too many storage updates.
+ *
+ * @dev SHU tokens transferred into the contract without using the `stake` function will be included
+ *      in the rewards distribution and shared among all stakers. This contract only supports SHU
+ *      tokens. Any non-SHU tokens transferred into the contract will be permanently lost.
  *
  */
 contract DelegateStaking is BaseStaking {
