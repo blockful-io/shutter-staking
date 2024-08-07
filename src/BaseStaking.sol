@@ -78,6 +78,9 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /// @notice Thrown when the argument is the zero address
     error AddressZero();
 
+    /// @notice Thrown when the amount of shares is 0
+    error SharesMustBeGreaterThanZero();
+
     /*//////////////////////////////////////////////////////////////
                                  MODIFIERS
     //////////////////////////////////////////////////////////////*/
@@ -214,9 +217,14 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
         // Calculate the amount of shares to mint
         uint256 shares = convertToShares(amount);
 
-        // Shares may be 0 if a first deposit donation attack occurs. Even it will not profitable for the attacker, as he will spend more tokens than he will get back
-        // this attack can still be employed to make a DDOS attack against a specific user. Although the targeted user will still be able to withdraw the SHU, this will only hold true if someone mints to increase the total supply.
-        require(shares > 0, "Shares must be greater than 0");
+        // A first deposit donation attack may result in shares being 0 if the
+        // contract has very high assets balance but a very low total supply.
+        // Although this attack is not profitable for the attacker, as they will
+        // spend more tokens than they will receive, it can still be used to perform a DDOS attack
+        // against a specific user. The targeted user can still withdraw their SHU,
+        // but this is only guaranteed if someone mints to increase the total supply of shares,
+        // because previewWithdraw rounds up and their shares will be less than the burn amount.
+        require(shares > 0, SharesMustBeGreaterThanZero());
 
         // Update the total locked amount
         totalLocked[user] += amount;

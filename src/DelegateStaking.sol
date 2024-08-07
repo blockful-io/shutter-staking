@@ -67,6 +67,9 @@ contract DelegateStaking is BaseStaking {
     /// @notice stores the metadata associated with a given stake
     mapping(uint256 id => Stake _stake) public stakes;
 
+    /// @notice stores the amount delegated to a keyper
+    mapping(address keyper => uint256 totalDelegated) public totalDelegated;
+
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -163,6 +166,9 @@ contract DelegateStaking is BaseStaking {
         stakes[stakeId].timestamp = block.timestamp;
         stakes[stakeId].lockPeriod = lockPeriod;
 
+        // Increase the keyper total delegated amount
+        totalDelegated[keyper] += amount;
+
         _deposit(user, amount);
 
         emit Staked(user, keyper, amount, lockPeriod);
@@ -210,6 +216,9 @@ contract DelegateStaking is BaseStaking {
 
         // Decrease the amount from the stake
         stakes[stakeId].amount -= amount;
+
+        // Decrease the total delegated amount
+        totalDelegated[userStake.keyper] -= amount;
 
         // If the stake is empty, remove it
         if (stakes[stakeId].amount == 0) {
