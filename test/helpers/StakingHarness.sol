@@ -14,4 +14,10 @@ contract StakingHarness is Staking {
     ) external view virtual returns (uint256) {
         return _maxWithdraw(keyper, unlockedAmount);
     }
+
+    function exposed_previewWithdraw(
+        uint256 amount
+    ) external view returns (uint256) {
+        return _previewWithdraw(amount);
+    }
 }

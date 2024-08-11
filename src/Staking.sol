@@ -27,8 +27,13 @@ import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
  *  Please be aware that the contract's Owner can change the minimum stake amount.
  *  If the Owner is compromised, they could set the minimum stake amount very high,
  *  making it impossible for keypers to unstake their SHU.
- *  The Owner of this contract is the Shutter DAO multisig. By staking SHU, you trust
- *  the Owner not to set the minimum stake amount to an unreasonably high value.
+ *  The Owner of this contract is the Shutter DAO multisig with a Azorius module.
+ *  By staking SHU, you trust the Owner not to set the minimum stake amount to
+ *  an unreasonably high value.
+ *
+ * @dev SHU tokens transferred into the contract without using the `stake` function will be included
+ *      in the rewards distribution and shared among all stakers. This contract only supports SHU
+ *      tokens. Any non-SHU tokens transferred into the contract will be permanently lost.
  *
  */
 contract Staking is BaseStaking {
@@ -84,6 +89,8 @@ contract Staking is BaseStaking {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
+    /// @notice Thrown when a user has no shares
+    error UserHasNoShares();
 
     /// @notice Thrown when a non-keyper attempts a call for which only keypers are allowed
     error OnlyKeyper();
@@ -97,7 +104,7 @@ contract Staking is BaseStaking {
 
     /// @notice Thrown when someone try to unstake a stake that doesn't belong
     /// to the keyper in question
-    error StakeDoesNotBelongToKeyper();
+    error StakeDoesNotBelongToUser();
 
     /// @notice Thrown when someone try to unstake a stake that doesn't exist
     error StakeDoesNotExist();
@@ -113,11 +120,6 @@ contract Staking is BaseStaking {
     modifier onlyKeyper() {
         require(keypers[msg.sender], OnlyKeyper());
         _;
-    }
-
-    /// @notice Ensure logic contract is unusable
-    constructor() {
-        _disableInitializers();
     }
 
     /// @notice Initialize the contract
@@ -211,10 +213,10 @@ contract Staking is BaseStaking {
         address keyper,
         uint256 stakeId,
         uint256 _amount
-    ) external returns (uint256 amount) {
+    ) external updateRewards returns (uint256 amount) {
         require(
             userStakes[keyper].contains(stakeId),
-            StakeDoesNotBelongToKeyper()
+            StakeDoesNotBelongToUser()
         );
         Stake memory keyperStake = stakes[stakeId];
 
@@ -233,7 +235,6 @@ contract Staking is BaseStaking {
             // must be locked for the lock period
             // If the global lock period is greater than the stake lock period,
             // the stake must be locked for the stake lock period
-
             uint256 lock = keyperStake.lockPeriod > lockPeriod
                 ? lockPeriod
                 : keyperStake.lockPeriod;
@@ -280,7 +281,6 @@ contract Staking is BaseStaking {
     /// @param _minStake The minimum stake amount
     function setMinStake(uint256 _minStake) external onlyOwner {
         minStake = _minStake;
-
         emit NewMinStake(_minStake);
     }
 
@@ -320,7 +320,7 @@ contract Staking is BaseStaking {
     ///         - if the keyper sSHU balance is less or equal than the minimum
     ///         stake or the total locked amount, the function will return 0
     /// @param keyper The keyper address
-    /// @param unlockedAmount The amount of assets to unlock
+    /// @param unlockedAmount The amount of unlocked assets
     /// @return amount The maximum amount of assets that a keyper can withdraw after unlocking a certain amount
     function _maxWithdraw(
         address keyper,

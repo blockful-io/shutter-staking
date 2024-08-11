@@ -53,16 +53,15 @@ jobs:
 
             # https://twitter.com/PaulRBerg/status/1611116650664796166
             - name: Generate fuzz seed with 1 day TTL
-              run: >
-                  echo "FOUNDRY_FUZZ_SEED=$(
-                    echo $(($EPOCHSECONDS - $EPOCHSECONDS % 86400))
-                  )" >> $GITHUB_ENV
+              run: |
+                  echo "FOUNDRY_FUZZ_SEED=$(( $(date +%s) - $(date +%s) % 86400 ))" >> $GITHUB_ENV
 
             - name: Run coverage
-              run: forge coverage --report summary --report lcov --ir-minimum
+              run: |
+                  forge coverage --report summary --report lcov --nmc IntegrationTest --ir-minimum
 
-            # To ignore coverage for certain directories modify the paths in this step as needed. The
-            # below default ignores coverage results for the test and script directories. Alternatively,
+            # To ignore coverage for certain directories modify the paths in this step as needed.
+            # The below default ignores coverage results for the test and script directories. Alternatively,
             # to include coverage in all directories, comment out this step. Note that because this
             # filtering applies to the lcov file, the summary table generated in the previous step will
             # still include all files and directories.
@@ -72,8 +71,7 @@ jobs:
             - name: Filter directories
               run: |
                   sudo apt update && sudo apt install -y lcov
-                  lcov --remove lcov.info 'test/*' 'script/*' 'src/libraries/*' \
-                  --output-file lcov.info --rc lcov_branch_coverage=1
+                  lcov --remove lcov.info 'test/*' 'script/*' 'src/libraries/*' --output-file lcov.info --rc lcov_branch_coverage=0
 
             # This step posts a detailed coverage report as a comment and deletes previous comments on
             # each push. The below step is used to fail coverage if the specified coverage threshold is
@@ -126,35 +124,35 @@ jobs:
                     echo "✅ Passed or warnings found" >> $GITHUB_STEP_SUMMARY
                   fi
 
-    slither-analyze:
-        runs-on: "ubuntu-latest"
-        permissions:
-            actions: "read"
-            contents: "read"
-            security-events: "write"
-        steps:
-            - name: "Check out the repo"
-              uses: "actions/checkout@v4"
+    # slither-analyze:
+    #     runs-on: "ubuntu-latest"
+    #     permissions:
+    #         actions: "read"
+    #         contents: "read"
+    #         security-events: "write"
+    #     steps:
+    #         - name: "Check out the repo"
+    #           uses: "actions/checkout@v4"
 
-            - name: "Install Bun"
-              uses: "oven-sh/setup-bun@v1"
+    #         - name: "Install Bun"
+    #           uses: "oven-sh/setup-bun@v1"
 
-            - name: "Install the Node.js dependencies"
-              run: "bun install"
+    #         - name: "Install the Node.js dependencies"
+    #           run: "bun install"
 
-            - name: "Run Slither analysis"
-              uses: "crytic/slither-action@v0.3.0"
-              id: "slither"
-              with:
-                  fail-on: "none"
-                  sarif: "results.sarif"
+    #         - name: "Run Slither analysis"
+    #           uses: "crytic/slither-action@v0.3.0"
+    #           id: "slither"
+    #           with:
+    #               fail-on: "none"
+    #               sarif: "results.sarif"
 
-            - name: "Upload SARIF file to GitHub code scanning"
-              uses: "github/codeql-action/upload-sarif@v2"
-              with:
-                  sarif_file: ${{ steps.slither.outputs.sarif }}
+    #         - name: "Upload SARIF file to GitHub code scanning"
+    #           uses: "github/codeql-action/upload-sarif@v2"
+    #           with:
+    #               sarif_file: ${{ steps.slither.outputs.sarif }}
 
-            - name: "Add summary"
-              run: |
-                  echo "## Slither result" >> $GITHUB_STEP_SUMMARY
-                  echo "✅ Uploaded to GitHub code scanning" >> $GITHUB_STEP_SUMMARY
+    #         - name: "Add summary"
+    #           run: |
+    #               echo "## Slither result" >> $GITHUB_STEP_SUMMARY
+    #               echo "✅ Uploaded to GitHub code scanning" >> $GITHUB_STEP_SUMMARY

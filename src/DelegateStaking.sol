@@ -25,10 +25,15 @@ interface IStaking {
  * A user's SHU balance is calculated as:
  *   balanceOf(user) * totalSupply() / totalShares()
  *
+ * Staking, unstaking, and claiming rewards are based on shares, not the balance directly.
+ * This method ensures the balance can change over time without needing too many storage updates.
+ *
  * When staking, you must specify a keyper address. This symbolically demonstrates your support
  * for that keyper. The keyper address must be a valid keyper in the staking contract.
- * Staking, unstaking, and claiming rewards are based on shares rather than the balance directly.
- * This method ensures the balance can change over time without needing too many storage updates.
+ *
+ * @dev SHU tokens transferred into the contract without using the `stake` function will be included
+ *      in the rewards distribution and shared among all stakers. This contract only supports SHU
+ *      tokens. Any non-SHU tokens transferred into the contract will be permanently lost.
  *
  */
 contract DelegateStaking is BaseStaking {
@@ -67,6 +72,9 @@ contract DelegateStaking is BaseStaking {
     /// @notice stores the metadata associated with a given stake
     mapping(uint256 id => Stake _stake) public stakes;
 
+    /// @notice stores the amount delegated to a keyper
+    mapping(address keyper => uint256 totalDelegated) public totalDelegated;
+
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
     //////////////////////////////////////////////////////////////*/
@@ -88,6 +96,9 @@ contract DelegateStaking is BaseStaking {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
+
+    /// @notice Thrown when a user has no shares
+    error UserHasNoShares();
 
     /// @notice Trown when amount is zero
     error ZeroAmount();
@@ -160,6 +171,9 @@ contract DelegateStaking is BaseStaking {
         stakes[stakeId].timestamp = block.timestamp;
         stakes[stakeId].lockPeriod = lockPeriod;
 
+        // Increase the keyper total delegated amount
+        totalDelegated[keyper] += amount;
+
         _deposit(user, amount);
 
         emit Staked(user, keyper, amount, lockPeriod);
@@ -183,7 +197,7 @@ contract DelegateStaking is BaseStaking {
     function unstake(
         uint256 stakeId,
         uint256 _amount
-    ) external returns (uint256 amount) {
+    ) external updateRewards returns (uint256 amount) {
         address user = msg.sender;
         require(userStakes[user].contains(stakeId), StakeDoesNotBelongToUser());
         Stake memory userStake = stakes[stakeId];
@@ -207,6 +221,9 @@ contract DelegateStaking is BaseStaking {
 
         // Decrease the amount from the stake
         stakes[stakeId].amount -= amount;
+
+        // Decrease the total delegated amount
+        totalDelegated[userStake.keyper] -= amount;
 
         // If the stake is empty, remove it
         if (stakes[stakeId].amount == 0) {
