@@ -1583,7 +1583,7 @@ contract ViewFunctions is DelegateStakingTest {
         assertEq(maxWithdraw, 0, "Wrong max withdraw");
     }
 
-    function testFuzz_convertToSharesNoSupply(uint256 assets) public view {
+    function testFuzz_ConvertToSharesNoSupply(uint256 assets) public view {
         assertEq(delegate.convertToShares(assets), assets);
     }
 
@@ -1642,6 +1642,26 @@ contract ViewFunctions is DelegateStakingTest {
         assertEq(stakeIds.length, 2, "Wrong stake ids");
         assertEq(stakeIds[0], stakeId1, "Wrong stake id");
         assertEq(stakeIds[1], stakeId2, "Wrong stake id");
+    }
+
+    function testFuzz_CalculateWithdrawAmountReturnsAmount(
+        address _keyper,
+        address _depositor,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_depositor, _amount);
+        _setKeyper(_keyper, true);
+
+        uint256 stakeId = _stake(_depositor, _keyper, _amount);
+
+        uint256 withdrawAmount = delegate.exposed_calculateWithdrawAmount(
+            _amount / 2,
+            _amount
+        );
+
+        assertEq(withdrawAmount, _amount / 2, "Wrong withdraw amount");
     }
 }
 
