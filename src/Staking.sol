@@ -112,16 +112,6 @@ contract Staking is BaseStaking {
     /// @notice Thrown when someone try to unstake a stake that is still locked
     error StakeIsStillLocked();
 
-    /*//////////////////////////////////////////////////////////////
-                                 MODIFIERS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Ensure only keypers can stake
-    modifier onlyKeyper() {
-        require(keypers[msg.sender], OnlyKeyper());
-        _;
-    }
-
     /// @notice Initialize the contract
     /// @param _owner The owner of the contract, i.e. the DAO contract address
     /// @param _stakingToken The address of the staking token, i.e. SHU
@@ -160,7 +150,9 @@ contract Staking is BaseStaking {
     /// @return stakeId The index of the stake
     function stake(
         uint256 amount
-    ) external onlyKeyper updateRewards returns (uint256 stakeId) {
+    ) external updateRewards returns (uint256 stakeId) {
+        require(keypers[msg.sender], OnlyKeyper());
+
         require(amount > 0, ZeroAmount());
 
         address user = msg.sender;
