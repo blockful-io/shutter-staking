@@ -233,7 +233,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
         _mint(user, shares);
 
         // Lock the SHU in the contract
-        stakingToken.safeTransferFrom(user, address(this), amount);
+        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
     }
 
     /// @notice Withdraw SHU from the contract
