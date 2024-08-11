@@ -1561,4 +1561,120 @@ contract ViewFunctions is DelegateStakingTest {
 
         assertApproxEqAbs(maxWithdraw, rewards, 0.1e18, "Wrong max withdraw");
     }
+
+    function testFuzz_MaxWithdrawDepositorHasMultipleLockedStakes(
+        address _keyper,
+        address _depositor,
+        uint256 _amount1,
+        uint256 _amount2,
+        uint256 _jump
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+        _amount2 = _boundToRealisticStake(_amount2);
+        _jump = _boundUnlockedTime(_jump);
+
+        _mintGovToken(_depositor, _amount1 + _amount2);
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor, _keyper, _amount1);
+        _stake(_depositor, _keyper, _amount2);
+
+        uint256 maxWithdraw = delegate.maxWithdraw(_depositor);
+        assertEq(maxWithdraw, 0, "Wrong max withdraw");
+    }
+
+    function testFuzz_convertToSharesNoSupply(uint256 assets) public view {
+        assertEq(delegate.convertToShares(assets), assets);
+    }
+
+    function testFuzz_ConvertToSharesHasSupplySameBlock(
+        address _keyper,
+        address _depositor,
+        uint256 _assets
+    ) public {
+        _assets = _boundToRealisticStake(_assets);
+
+        _mintGovToken(_depositor, _assets);
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor, _keyper, _assets);
+
+        uint256 shares = delegate.convertToShares(_assets);
+
+        assertEq(shares, _assets, "Wrong shares");
+    }
+
+    function testFuzz_ConvertToAssetsHasSupplySameBlock(
+        address _keyper,
+        address _depositor,
+        uint256 _assets
+    ) public {
+        _assets = _boundToRealisticStake(_assets);
+
+        _mintGovToken(_depositor, _assets);
+        _setKeyper(_keyper, true);
+
+        _stake(_depositor, _keyper, _assets);
+
+        uint256 shares = delegate.convertToShares(_assets);
+        uint256 assets = delegate.convertToAssets(shares);
+
+        assertEq(assets, _assets, "Wrong assets");
+    }
+
+    function testFuzz_GetUserStakeIds(
+        address _keyper,
+        address _depositor,
+        uint256 _amount1,
+        uint256 _amount2
+    ) public {
+        _amount1 = _boundToRealisticStake(_amount1);
+        _amount2 = _boundToRealisticStake(_amount2);
+
+        _mintGovToken(_depositor, _amount1 + _amount2);
+        _setKeyper(_keyper, true);
+
+        uint256 stakeId1 = _stake(_depositor, _keyper, _amount1);
+        uint256 stakeId2 = _stake(_depositor, _keyper, _amount2);
+
+        uint256[] memory stakeIds = delegate.getUserStakeIds(_depositor);
+
+        assertEq(stakeIds.length, 2, "Wrong stake ids");
+        assertEq(stakeIds[0], stakeId1, "Wrong stake id");
+        assertEq(stakeIds[1], stakeId2, "Wrong stake id");
+    }
+}
+
+contract Transfer is DelegateStakingTest {
+    function testFuzz_RevertWith_transferDisabled(
+        address _from,
+        address _to,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_from, _amount);
+        _setKeyper(_from, true);
+
+        _stake(_from, _from, _amount);
+
+        vm.expectRevert(BaseStaking.TransferDisabled.selector);
+        delegate.transfer(_to, _amount);
+    }
+
+    function testFuzz_RevertWith_transferFromDisabled(
+        address _from,
+        address _to,
+        uint256 _amount
+    ) public {
+        _amount = _boundToRealisticStake(_amount);
+
+        _mintGovToken(_from, _amount);
+        _setKeyper(_from, true);
+
+        _stake(_from, _from, _amount);
+
+        vm.expectRevert(BaseStaking.TransferDisabled.selector);
+        delegate.transferFrom(_from, _to, _amount);
+    }
 }

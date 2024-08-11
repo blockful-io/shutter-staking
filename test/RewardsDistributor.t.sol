@@ -136,6 +136,7 @@ contract OwnableFunctions is RewardsDistributorTest {
     function testFuzz_RevertIf_SetRewardConfigurationEmissionRateZero(
         address _receiver
     ) public {
+        vm.assume(_receiver != address(0));
         vm.expectRevert(RewardsDistributor.EmissionRateZero.selector);
         rewardsDistributor.setRewardConfiguration(_receiver, 0);
     }

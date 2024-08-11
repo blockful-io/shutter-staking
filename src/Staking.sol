@@ -281,7 +281,6 @@ contract Staking is BaseStaking {
     /// @param _minStake The minimum stake amount
     function setMinStake(uint256 _minStake) external onlyOwner {
         minStake = _minStake;
-
         emit NewMinStake(_minStake);
     }
 
@@ -321,7 +320,7 @@ contract Staking is BaseStaking {
     ///         - if the keyper sSHU balance is less or equal than the minimum
     ///         stake or the total locked amount, the function will return 0
     /// @param keyper The keyper address
-    /// @param unlockedAmount The amount of assets to unlock
+    /// @param unlockedAmount The amount of unlocked assets
     /// @return amount The maximum amount of assets that a keyper can withdraw after unlocking a certain amount
     function _maxWithdraw(
         address keyper,

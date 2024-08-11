@@ -1771,7 +1771,7 @@ contract ViewFunctions is StakingTest {
         assertEq(assets, _assets, "Wrong assets");
     }
 
-    function testFuzz_GetKeyperStakeIds(
+    function testFuzz_GetUserStakeIds(
         address _depositor,
         uint256 _amount1,
         uint256 _amount2
