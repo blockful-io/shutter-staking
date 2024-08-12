@@ -5,6 +5,7 @@ import "@forge-std/Script.sol";
 import {TransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {RewardsDistributor} from "src/RewardsDistributor.sol";
 import {Staking} from "src/Staking.sol";
+import {DelegateStaking} from "src/DelegateStaking.sol";
 import {MockGovToken} from "test/mocks/MockGovToken.sol";
 import "./Constants.sol";
 
@@ -12,7 +13,11 @@ import "./Constants.sol";
 contract DeployTestnet is Script {
     function run()
         public
-        returns (Staking stakingProxy, RewardsDistributor rewardsDistributor)
+        returns (
+            Staking stakingProxy,
+            RewardsDistributor rewardsDistributor,
+            DelegateStaking delegateProxy
+        )
     {
         vm.startBroadcast();
 
@@ -40,6 +45,25 @@ contract DeployTestnet is Script {
             address(rewardsDistributor),
             LOCK_PERIOD,
             MIN_STAKE
+        );
+
+        DelegateStaking delegate = new DelegateStaking();
+        delegateProxy = DelegateStaking(
+            address(
+                new TransparentUpgradeableProxy(
+                    address(delegate),
+                    address(CONTRACT_OWNER),
+                    ""
+                )
+            )
+        );
+
+        delegateProxy.initialize(
+            CONTRACT_OWNER,
+            MOCKED_SHU,
+            address(rewardsDistributor),
+            address(stakingProxy),
+            LOCK_PERIOD
         );
 
         vm.stopBroadcast();

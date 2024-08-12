@@ -180,9 +180,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     function convertToShares(
         uint256 assets
     ) public view virtual returns (uint256) {
-        // sum + 1 on both sides to prevent donation attack
-        // this is the same as OZ ERC4626 prevetion to inflation attack with decimal offset = 0
-        return assets.mulDivDown(totalSupply() + 1, _totalAssets() + 1);
+        return assets.mulDivDown(totalSupply(), _totalAssets());
     }
 
     /// @notice Get the total amount of assets the shares are worth
@@ -190,9 +188,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     function convertToAssets(
         uint256 shares
     ) public view virtual returns (uint256) {
-        // sum + 1 on both sides to prevent donation attack
-        // this is the same as OZ ERC4626 prevetion to inflation attack with decimal offset = 0
-        return shares.mulDivDown(_totalAssets() + 1, totalSupply() + 1);
+        return shares.mulDivDown(_totalAssets(), totalSupply());
     }
 
     /// @notice Get the stake ids belonging to a user
@@ -213,24 +209,17 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /// @notice Deposit SHU into the contract
     /// @param user The user address
     /// @param amount The amount of SHU to deposit
-    function _deposit(address user, uint256 amount) internal {
+    function _deposit(uint256 amount) internal {
         // Calculate the amount of shares to mint
         uint256 shares = convertToShares(amount);
 
-        // A first deposit donation attack may result in shares being 0 if the
-        // contract has very high assets balance but a very low total supply.
-        // Although this attack is not profitable for the attacker, as they will
-        // spend more tokens than they will receive, it can still be used to perform a DDOS attack
-        // against a specific user. The targeted user can still withdraw their SHU,
-        // but this is only guaranteed if someone mints to increase the total supply of shares,
-        // because previewWithdraw rounds up and their shares will be less than the burn amount.
-        require(shares > 0, SharesMustBeGreaterThanZero());
-
         // Update the total locked amount
-        totalLocked[user] += amount;
+        unchecked {
+            totalLocked[msg.sender] += amount;
+        }
 
         // Mint the shares
-        _mint(user, shares);
+        _mint(msg.sender, shares);
 
         // Lock the SHU in the contract
         stakingToken.safeTransferFrom(msg.sender, address(this), amount);
@@ -263,9 +252,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /// @notice Get the amount of shares that will be burned
     /// @param assets The amount of assets
     function _previewWithdraw(uint256 assets) internal view returns (uint256) {
-        // sum + 1 on both sides to prevent donation attack
-        // this is the same as OZ ERC4626 prevetion to inflation attack with decimal offset = 0
-        return assets.mulDivUp(totalSupply() + 1, _totalAssets() + 1);
+        return assets.mulDivUp(totalSupply(), _totalAssets());
     }
 
     /// @notice Calculates the amount to withdraw

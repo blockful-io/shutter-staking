@@ -27,7 +27,7 @@ contract StakingIntegrationTest is Test {
         vm.createSelectFork(vm.rpcUrl("mainnet"), 20254999);
 
         Deploy deployScript = new Deploy();
-        (staking, rewardsDistributor) = deployScript.run();
+        (staking, rewardsDistributor, ) = deployScript.run();
     }
 
     function _boundRealisticTimeAhead(

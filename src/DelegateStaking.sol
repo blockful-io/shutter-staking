@@ -172,9 +172,11 @@ contract DelegateStaking is BaseStaking {
         stakes[stakeId].lockPeriod = lockPeriod;
 
         // Increase the keyper total delegated amount
-        totalDelegated[keyper] += amount;
+        unchecked {
+            totalDelegated[keyper] += amount;
+        }
 
-        _deposit(user, amount);
+        _deposit(amount);
 
         emit Staked(user, keyper, amount, lockPeriod);
     }
