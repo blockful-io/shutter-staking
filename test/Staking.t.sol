@@ -712,9 +712,8 @@ contract Stake is StakingTest {
         );
 
         // bob unstake maximum he can unstake
-        uint256 maxBobCanWithdraw = staking.exposed_maxWithdraw(bob, bobStake);
         vm.prank(bob);
-        staking.unstake(bob, bobStakeId, maxBobCanWithdraw);
+        staking.unstake(bob, bobStakeId, bobStake);
 
         uint256 bobBalance = govToken.balanceOf(bob);
 

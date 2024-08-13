@@ -224,7 +224,11 @@ contract OwnableFunctions is RewardsDistributorTest {
 
         uint256 balanceBefore = govToken.balanceOf(_to);
 
-        rewardsDistributor.withdrawFunds(_to, _amount);
+        rewardsDistributor.withdrawFunds(
+            address(rewardsDistributor.rewardToken()),
+            _to,
+            _amount
+        );
 
         assertEq(govToken.balanceOf(_to), balanceBefore + _amount);
     }
@@ -243,7 +247,11 @@ contract OwnableFunctions is RewardsDistributorTest {
             )
         );
         vm.prank(_anyone);
-        rewardsDistributor.withdrawFunds(_to, _amount);
+        rewardsDistributor.withdrawFunds(
+            address(rewardsDistributor.rewardToken()),
+            _to,
+            _amount
+        );
     }
 }
 

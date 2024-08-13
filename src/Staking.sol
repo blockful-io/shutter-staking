@@ -242,20 +242,8 @@ contract Staking is BaseStaking {
                 );
             }
 
-            uint256 maxWithdraw = keyperStake.amount - minStake;
-            require(amount <= maxWithdraw, WithdrawAmountTooHigh());
-
-            // The unstake can't never result in a keyper SHU staked < minStake
-            require(
-                _maxWithdraw(keyper, keyperStake.amount) >= amount,
-                WithdrawAmountTooHigh()
-            );
-        } else {
-            // doesn't include the min stake and locked staked as the keyper is not a keyper anymore
-            require(
-                convertToAssets(balanceOf(keyper)) >= amount,
-                WithdrawAmountTooHigh()
-            );
+            uint256 maxWithdrawAvailable = keyperStake.amount - minStake;
+            require(amount <= maxWithdrawAvailable, WithdrawAmountTooHigh());
         }
 
         // Decrease the amount from the stake
@@ -307,31 +295,12 @@ contract Staking is BaseStaking {
     /// @return amount The maximum amount of assets that a keyper can withdraw
     function maxWithdraw(
         address keyper
-    ) public view override returns (uint256) {
-        return _maxWithdraw(keyper, 0);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                          INTERNAL FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Get the maximum amount of assets that a keyper can withdraw
-    ///         after unlocking a certain amount
-    ///         - if the keyper has no shares, the function will revert
-    ///         - if the keyper sSHU balance is less or equal than the minimum
-    ///         stake or the total locked amount, the function will return 0
-    /// @param keyper The keyper address
-    /// @param unlockedAmount The amount of unlocked assets
-    /// @return amount The maximum amount of assets that a keyper can withdraw after unlocking a certain amount
-    function _maxWithdraw(
-        address keyper,
-        uint256 unlockedAmount
-    ) internal view virtual returns (uint256 amount) {
+    ) public view override returns (uint256 amount) {
         uint256 assets = convertToAssets(balanceOf(keyper));
         require(assets > 0, UserHasNoShares());
 
         unchecked {
-            uint256 locked = totalLocked[keyper] - unlockedAmount;
+            uint256 locked = totalLocked[keyper];
             uint256 compare = locked >= minStake ? locked : minStake;
 
             // need the first branch as convertToAssets rounds down

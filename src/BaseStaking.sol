@@ -207,7 +207,6 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice Deposit SHU into the contract
-    /// @param user The user address
     /// @param amount The amount of SHU to deposit
     function _deposit(uint256 amount) internal {
         // Calculate the amount of shares to mint
