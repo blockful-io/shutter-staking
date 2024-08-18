@@ -7,6 +7,8 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
+import {Create2} from "@openzeppelin/contracts/utils/Create2.sol";
+
 import {FixedPointMathLib} from "src/libraries/FixedPointMathLib.sol";
 import {Staking} from "src/Staking.sol";
 import {BaseStaking} from "src/BaseStaking.sol";
@@ -33,7 +35,6 @@ contract StakingTest is Test {
         _jumpAhead(1234);
 
         govToken = new MockGovToken();
-        _mintGovToken(address(this), 100_000_000e18);
         vm.label(address(govToken), "govToken");
 
         // deploy rewards distributor
@@ -51,6 +52,10 @@ contract StakingTest is Test {
         );
         vm.label(address(staking), "staking");
 
+        _mintGovToken(address(this), 1000e18);
+
+        govToken.approve(address(staking), 1000e18);
+
         staking.initialize(
             address(this), // owner
             address(govToken),
@@ -65,7 +70,8 @@ contract StakingTest is Test {
         );
 
         // fund reward distribution
-        govToken.transfer(address(rewardsDistributor), 100_000_000e18);
+
+        _mintGovToken(address(rewardsDistributor), 100_000_000e18);
     }
 
     function _jumpAhead(uint256 _seconds) public {

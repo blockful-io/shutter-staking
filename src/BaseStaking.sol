@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {console} from "@forge-std/console.sol";
 import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
 import {EnumerableSetLib} from "@solady/utils/EnumerableSetLib.sol";
@@ -180,7 +181,12 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     function convertToShares(
         uint256 assets
     ) public view virtual returns (uint256) {
-        return assets.mulDivDown(totalSupply(), _totalAssets());
+        console.log("totoal supply", totalSupply());
+        console.log("total assets", _totalAssets());
+        console.log("assets", assets);
+        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? assets : assets.mulDivDown(supply, _totalAssets());
     }
 
     /// @notice Get the total amount of assets the shares are worth
@@ -188,7 +194,9 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     function convertToAssets(
         uint256 shares
     ) public view virtual returns (uint256) {
-        return shares.mulDivDown(_totalAssets(), totalSupply());
+        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? shares : shares.mulDivDown(_totalAssets(), supply);
     }
 
     /// @notice Get the stake ids belonging to a user
@@ -208,20 +216,20 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
 
     /// @notice Deposit SHU into the contract
     /// @param amount The amount of SHU to deposit
-    function _deposit(uint256 amount) internal {
+    function _deposit(address to, uint256 amount) internal {
         // Calculate the amount of shares to mint
         uint256 shares = convertToShares(amount);
 
         // Update the total locked amount
         unchecked {
-            totalLocked[msg.sender] += amount;
+            totalLocked[to] += amount;
         }
 
         // Mint the shares
-        _mint(msg.sender, shares);
+        _mint(to, shares);
 
         // Lock the SHU in the contract
-        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+        stakingToken.safeTransferFrom(to, address(this), amount);
     }
 
     /// @notice Withdraw SHU from the contract
@@ -251,7 +259,9 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /// @notice Get the amount of shares that will be burned
     /// @param assets The amount of assets
     function _previewWithdraw(uint256 assets) internal view returns (uint256) {
-        return assets.mulDivUp(totalSupply(), _totalAssets());
+        uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
+        return supply == 0 ? assets : assets.mulDivUp(supply, _totalAssets());
     }
 
     /// @notice Calculates the amount to withdraw

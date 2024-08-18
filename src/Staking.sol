@@ -141,8 +141,16 @@ contract Staking is BaseStaking {
 
         nextStakeId = 1;
 
-        // TODO find the correct value here
-        _mint(address(0), 1e18);
+        // mint dead shares to avoid inflation attack
+        uint256 amount = 1000e18;
+        // Calculate the amount of shares to mint
+        uint256 shares = convertToShares(amount);
+
+        // Mint the shares to the vault
+        _mint(address(this), shares);
+
+        // Lock the SHU in the contract
+        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
     }
 
     /// @notice Stake SHU
@@ -179,7 +187,7 @@ contract Staking is BaseStaking {
         stakes[stakeId].timestamp = block.timestamp;
         stakes[stakeId].lockPeriod = lockPeriod;
 
-        _deposit(amount);
+        _deposit(msg.sender, amount);
 
         emit Staked(msg.sender, amount, lockPeriod);
     }

@@ -35,7 +35,6 @@ contract DelegateStakingTest is Test {
         _jumpAhead(1234);
 
         govToken = new MockGovToken();
-        _mintGovToken(address(this), 100_000_000e18);
         vm.label(address(govToken), "govToken");
 
         // deploy rewards distributor
@@ -54,6 +53,8 @@ contract DelegateStakingTest is Test {
         );
         vm.label(address(staking), "staking");
 
+        _mintGovToken(address(this), 2000e18);
+        govToken.approve(address(staking), 1000e18);
         staking.initialize(
             address(this), // owner
             address(govToken),
@@ -72,6 +73,8 @@ contract DelegateStakingTest is Test {
         );
         vm.label(address(delegate), "delegate");
 
+        govToken.approve(address(delegate), 1000e18);
+
         delegate.initialize(
             address(this), // owner
             address(govToken),
@@ -86,7 +89,7 @@ contract DelegateStakingTest is Test {
         );
 
         // fund reward distribution
-        govToken.transfer(address(rewardsDistributor), 100_000_000e18);
+        _mintGovToken(address(rewardsDistributor), 100_000_000e18);
     }
 
     function _setKeyper(address _keyper, bool _isKeyper) internal {

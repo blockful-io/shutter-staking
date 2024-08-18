@@ -141,6 +141,18 @@ contract DelegateStaking is BaseStaking {
         lockPeriod = _lockPeriod;
 
         nextStakeId = 1;
+
+        // mint dead shares to avoid inflation attack
+        uint256 amount = 1000e18;
+
+        // Calculate the amount of shares to mint
+        uint256 shares = convertToShares(amount);
+
+        // Mint the shares to the vault
+        _mint(address(this), shares);
+
+        // Transfer the SHU to the vault
+        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
     }
 
     /// @notice Stake SHU
@@ -158,12 +170,10 @@ contract DelegateStaking is BaseStaking {
 
         require(staking.keypers(keyper), AddressIsNotAKeyper());
 
-        address user = msg.sender;
-
         stakeId = nextStakeId++;
 
         // Add the stake id to the user stakes
-        userStakes[user].add(stakeId);
+        userStakes[msg.sender].add(stakeId);
 
         // Add the stake to the stakes mapping
         stakes[stakeId].keyper = keyper;
@@ -176,9 +186,9 @@ contract DelegateStaking is BaseStaking {
             totalDelegated[keyper] += amount;
         }
 
-        _deposit(amount);
+        _deposit(msg.sender, amount);
 
-        emit Staked(user, keyper, amount, lockPeriod);
+        emit Staked(msg.sender, keyper, amount, lockPeriod);
     }
 
     /// @notice Unstake SHU
