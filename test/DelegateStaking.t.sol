@@ -165,7 +165,7 @@ contract DelegateStakingTest is Test {
 
         uint256 assets = govToken.balanceOf(address(delegate)) +
             _rewardsDistributed;
-        return _amount.mulDivUp(supply + 1, assets + 1);
+        return _amount.mulDivUp(supply, assets);
     }
 
     function _convertToSharesIncludeRewardsDistributed(
@@ -177,7 +177,19 @@ contract DelegateStakingTest is Test {
         uint256 assets = govToken.balanceOf(address(delegate)) +
             _rewardsDistributed;
 
-        return _amount.mulDivDown(supply + 1, assets + 1);
+        return _amount.mulDivDown(supply, assets);
+    }
+
+    function _convertToAssetsIncludeRewardsDistributed(
+        uint256 _shares,
+        uint256 _rewardsDistributed
+    ) internal view returns (uint256) {
+        uint256 supply = delegate.totalSupply();
+
+        uint256 assets = govToken.balanceOf(address(delegate)) +
+            _rewardsDistributed;
+
+        return _shares.mulDivDown(assets, supply);
     }
 }
 
@@ -757,16 +769,21 @@ contract ClaimRewards is DelegateStakingTest {
 
         _jumpAhead(_jump);
 
+        // first 1000 shares was the dead shares so must decrease from the expected rewards
+        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
+            delegate.balanceOf(_depositor),
+            REWARD_RATE * _jump
+        );
+
+        uint256 expectedRewards = assetsAmount - _amount;
+
         vm.startPrank(_depositor);
         delegate.claimRewards(0);
 
-        uint256 expectedRewards = REWARD_RATE * (_jump);
-
         // need to accept a small error due to the donation attack prevention
-        assertApproxEqAbs(
+        assertEq(
             govToken.balanceOf(_depositor),
             expectedRewards,
-            1e18,
             "Wrong balance"
         );
     }

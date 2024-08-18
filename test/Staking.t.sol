@@ -149,7 +149,7 @@ contract StakingTest is Test {
 
         uint256 assets = govToken.balanceOf(address(staking)) +
             _rewardsDistributed;
-        return _amount.mulDivUp(supply + 1, assets + 1);
+        return _amount.mulDivUp(supply, assets);
     }
 
     function _convertToSharesIncludeRewardsDistributed(
@@ -161,7 +161,19 @@ contract StakingTest is Test {
         uint256 assets = govToken.balanceOf(address(staking)) +
             _rewardsDistributed;
 
-        return _amount.mulDivDown(supply + 1, assets + 1);
+        return _amount.mulDivDown(supply, assets);
+    }
+
+    function _convertToAssetsIncludeRewardsDistributed(
+        uint256 _shares,
+        uint256 _rewardsDistributed
+    ) internal view returns (uint256) {
+        uint256 supply = staking.totalSupply();
+
+        uint256 assets = govToken.balanceOf(address(staking)) +
+            _rewardsDistributed;
+
+        return _shares.mulDivDown(assets, supply);
     }
 }
 
@@ -747,21 +759,23 @@ contract ClaimRewards is StakingTest {
 
         _stake(_depositor, _amount);
 
-        uint256 timestampBefore = vm.getBlockTimestamp();
-
         _jumpAhead(_jump);
+
+        // first 1000 shares was the dead shares so must decrease from the expected rewards
+        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
+            staking.balanceOf(_depositor),
+            REWARD_RATE * _jump
+        );
+
+        uint256 expectedRewards = assetsAmount - _amount;
 
         vm.prank(_depositor);
         staking.claimRewards(0);
 
-        uint256 expectedRewards = REWARD_RATE *
-            (vm.getBlockTimestamp() - timestampBefore);
-
         // need to accept a small error due to the donation attack prevention
-        assertApproxEqAbs(
+        assertEq(
             govToken.balanceOf(_depositor),
             expectedRewards,
-            1e18,
             "Wrong balance"
         );
     }
