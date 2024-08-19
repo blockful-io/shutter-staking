@@ -28,7 +28,7 @@ contract DelegateStakingTest is Test {
 
     uint256 constant LOCK_PERIOD = 182 days; // 6 months
     uint256 constant REWARD_RATE = 0.1e18;
-    uint256 constant INITIAL_DEPOSIT = 1000e18;
+    uint256 constant INITIAL_DEPOSIT = 10000e18;
 
     function setUp() public {
         // Set the block timestamp to an arbitrary value to avoid introducing assumptions into tests
@@ -690,9 +690,9 @@ contract Stake is DelegateStakingTest {
 
         bobAmount = _boundToRealisticStake(bobAmount);
 
-        // alice deposits 1
-        _mintGovToken(alice, 1);
-        _stake(alice, keyper, 1);
+        uint256 aliceDeposit = 1000e18;
+        _mintGovToken(alice, aliceDeposit);
+        uint256 aliceStakeId = _stake(alice, keyper, aliceDeposit);
 
         // simulate donation
         govToken.mint(address(delegate), bobAmount);
@@ -705,7 +705,7 @@ contract Stake is DelegateStakingTest {
 
         // alice withdraw rewards (bob stake) even when there is no rewards distributed
         vm.startPrank(alice);
-        //delegate.unstake(aliceStakeId, 0);
+        delegate.unstake(aliceStakeId, 0);
         uint256 aliceRewards = delegate.claimRewards(0);
         vm.stopPrank();
 
@@ -713,25 +713,22 @@ contract Stake is DelegateStakingTest {
 
         // attack should not be profitable for alice
         assertGtDecimal(
-            bobAmount + 1, // amount alice has spend in total
+            bobAmount + aliceDeposit, // amount alice has spend in total
             aliceBalanceAfterAttack,
-            1e18,
+            18,
             "Alice receive more than expend for the attack"
         );
 
-        // as previewWithdraw rounds up, someone needs to stake again to have a dSHU total supply > 1
-        // so bob can unstake
-        _mintGovToken(bob, aliceRewards + 10e18);
-        _stake(bob, keyper, aliceRewards + 10e18);
+        uint256 maxBobWithdrawable = delegate.convertToAssets(
+            delegate.balanceOf(bob)
+        );
 
-        vm.prank(bob);
-        delegate.unstake(bobStakeId, 0);
-
-        uint256 bobBalanceAfterAttack = govToken.balanceOf(bob);
+        vm.startPrank(bob);
+        delegate.unstake(bobStakeId, bobAmount - 1e5);
 
         // Alice earn less than bob
         assertGt(
-            bobBalanceAfterAttack,
+            govToken.balanceOf(bob),
             aliceBalanceAfterAttack,
             "Alice earn more than Bob after the attack"
         );
