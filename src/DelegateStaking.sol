@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
+import {console} from "@forge-std/console.sol";
 
 import {EnumerableSetLib} from "@solady/utils/EnumerableSetLib.sol";
 import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -143,7 +144,7 @@ contract DelegateStaking is BaseStaking {
         nextStakeId = 1;
 
         // mint dead shares to avoid inflation attack
-        uint256 amount = 1000e18;
+        uint256 amount = 10_000e18;
 
         // Calculate the amount of shares to mint
         uint256 shares = convertToShares(amount);
@@ -285,9 +286,12 @@ contract DelegateStaking is BaseStaking {
         require(shares > 0, UserHasNoShares());
 
         uint256 assets = convertToAssets(shares);
+        console.log("user assets", assets);
         uint256 locked = totalLocked[user];
+        console.log("locked", locked);
 
         // need the first branch as convertToAssets rounds down
         amount = locked >= assets ? 0 : assets - locked;
+        console.log("max withdrawable", amount);
     }
 }

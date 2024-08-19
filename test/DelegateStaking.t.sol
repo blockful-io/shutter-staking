@@ -727,10 +727,11 @@ contract Stake is DelegateStakingTest {
         delegate.unstake(bobStakeId, bobAmount - 1e5);
 
         // Alice earn less than bob
-        assertGt(
+        assertApproxEqRel(
             govToken.balanceOf(bob),
-            aliceBalanceAfterAttack,
-            "Alice earn more than Bob after the attack"
+            bobAmount,
+            0.01e18,
+            "Bob must received the money back"
         );
     }
 

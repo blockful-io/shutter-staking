@@ -181,9 +181,6 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     function convertToShares(
         uint256 assets
     ) public view virtual returns (uint256) {
-        console.log("totoal supply", totalSupply());
-        console.log("total assets", _totalAssets());
-        console.log("assets", assets);
         uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
 
         return supply == 0 ? assets : assets.mulDivDown(supply, _totalAssets());
@@ -240,6 +237,10 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
         uint256 amount
     ) internal returns (uint256 shares) {
         shares = _previewWithdraw(amount);
+
+        console.log("balance ", balanceOf(user));
+        console.log("needs ", shares);
+        console.log("to withdraw", amount);
 
         // Decrease the amount from the total locked
         totalLocked[user] -= amount;

@@ -142,7 +142,8 @@ contract Staking is BaseStaking {
         nextStakeId = 1;
 
         // mint dead shares to avoid inflation attack
-        uint256 amount = 1000e18;
+        uint256 amount = 10_000e18;
+
         // Calculate the amount of shares to mint
         uint256 shares = convertToShares(amount);
 

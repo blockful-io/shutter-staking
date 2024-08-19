@@ -1715,8 +1715,7 @@ contract ViewFunctions is StakingTest {
 
         _jumpAhead(_jump);
 
-        // depositor 2 stakes and collect rewards from distirbutor
-        _mintGovToken(_depositoron2, _amount2);
+        _mintGovToken(_depositor2, _amount2);
         _setKeyper(_depositor2, true);
 
         _stake(_depositor2, _amount2);
