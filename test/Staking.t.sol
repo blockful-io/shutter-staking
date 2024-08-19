@@ -28,6 +28,7 @@ contract StakingTest is Test {
     uint256 constant LOCK_PERIOD = 182 days; // 6 months
     uint256 constant MIN_STAKE = 50_000e18; // 50k
     uint256 constant REWARD_RATE = 0.1e18;
+    uint256 constant INITIAL_DEPOSIT = 1000e18;
 
     function setUp() public {
         // Set the block timestamp to an arbitrary value to avoid introducing assumptions into tests
@@ -449,7 +450,7 @@ contract Stake is StakingTest {
         );
         assertEq(staking.balanceOf(_depositor1), shares);
         assertEq(staking.balanceOf(_depositor2), shares);
-        assertEq(staking.totalSupply(), 2 * shares);
+        assertEq(staking.totalSupply(), 2 * shares + INITIAL_DEPOSIT);
     }
 
     function testFuzz_Depositor1ReceivesMoreShareWhenStakingBeforeDepositor2(
@@ -1712,8 +1713,6 @@ contract ViewFunctions is StakingTest {
 
         _stake(_depositor1, _amount1);
 
-        uint256 timestampBefore = vm.getBlockTimestamp();
-
         _jumpAhead(_jump);
 
         // depositor 2 stakes and collect rewards from distirbutor
@@ -1722,8 +1721,11 @@ contract ViewFunctions is StakingTest {
 
         _stake(_depositor2, _amount2);
 
-        uint256 rewards = REWARD_RATE *
-            (vm.getBlockTimestamp() - timestampBefore);
+        uint256 assetsAmount = staking.convertToAssets(
+            staking.balanceOf(_depositor1)
+        );
+
+        uint256 rewards = assetsAmount - _amount1;
 
         uint256 maxWithdraw = staking.maxWithdraw(_depositor1);
         assertApproxEqAbs(maxWithdraw, rewards, 0.1e18, "Wrong max withdraw");
@@ -1767,10 +1769,6 @@ contract ViewFunctions is StakingTest {
         uint256 shares = staking.convertToShares(_assets);
 
         assertEq(shares, _assets, "Wrong shares");
-    }
-
-    function testFuzz_ConvertToAssetsNoSupply(uint256 shares) public view {
-        assertEq(staking.convertToAssets(shares), shares);
     }
 
     function testFuzz_ConvertToAssetsHasSupplySameBlock(

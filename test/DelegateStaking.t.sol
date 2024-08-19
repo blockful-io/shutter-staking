@@ -28,6 +28,7 @@ contract DelegateStakingTest is Test {
 
     uint256 constant LOCK_PERIOD = 182 days; // 6 months
     uint256 constant REWARD_RATE = 0.1e18;
+    uint256 constant INITIAL_DEPOSIT = 1000e18;
 
     function setUp() public {
         // Set the block timestamp to an arbitrary value to avoid introducing assumptions into tests
@@ -53,8 +54,8 @@ contract DelegateStakingTest is Test {
         );
         vm.label(address(staking), "staking");
 
-        _mintGovToken(address(this), 2000e18);
-        govToken.approve(address(staking), 1000e18);
+        _mintGovToken(address(this), INITIAL_DEPOSIT * 2);
+        govToken.approve(address(staking), INITIAL_DEPOSIT);
         staking.initialize(
             address(this), // owner
             address(govToken),
@@ -73,7 +74,7 @@ contract DelegateStakingTest is Test {
         );
         vm.label(address(delegate), "delegate");
 
-        govToken.approve(address(delegate), 1000e18);
+        govToken.approve(address(delegate), INITIAL_DEPOSIT);
 
         delegate.initialize(
             address(this), // owner
@@ -458,14 +459,15 @@ contract Stake is DelegateStakingTest {
         _stake(_depositor1, _keyper1, _amount);
         _stake(_depositor2, _keyper2, _amount);
 
-        assertEq(
+        assertApproxEqAbs(
             delegate.balanceOf(_depositor1),
             delegate.balanceOf(_depositor2),
+            1e5,
             "Wrong balance"
         );
         assertEq(delegate.balanceOf(_depositor1), shares);
         assertEq(delegate.balanceOf(_depositor2), shares);
-        assertEq(delegate.totalSupply(), 2 * shares);
+        assertEq(delegate.totalSupply(), 2 * shares + INITIAL_DEPOSIT);
     }
 
     function testFuzz_Depositor1ReceivesMoreShareWhenStakingBeforeDepositor2(
@@ -859,13 +861,18 @@ contract ClaimRewards is DelegateStakingTest {
 
         _jumpAhead(_jump);
 
+        // first 1000 shares was the dead shares so must decrease from the expected rewards
+        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
+            delegate.balanceOf(_depositor),
+            REWARD_RATE * _jump
+        );
+
+        uint256 expectedRewards = assetsAmount - _amount;
+
         vm.prank(_depositor);
         uint256 rewards = delegate.claimRewards(0);
 
-        uint256 expectedRewards = REWARD_RATE * _jump;
-
-        // need to accept a small error due to the donation attack prevention
-        assertApproxEqAbs(rewards, expectedRewards, 1e18, "Wrong rewards");
+        assertEq(rewards, expectedRewards, "Wrong rewards");
     }
 
     function testFuzz_ClaimRewardBurnShares(
