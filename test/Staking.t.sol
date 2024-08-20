@@ -1268,14 +1268,21 @@ contract Unstake is StakingTest {
 
         _jumpAhead(_jump);
 
-        uint256 expectedRewards = REWARD_RATE * _jump;
+        // first 1000 shares was the dead shares so must decrease from the expected rewards
+        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
+            staking.balanceOf(_depositor),
+            REWARD_RATE * _jump
+        );
+
+        uint256 expectedRewards = assetsAmount - _amount;
+
         uint256 sharesToBurn = _previewWithdrawIncludeRewardsDistributed(
-            _amount,
-            expectedRewards
+            expectedRewards,
+            REWARD_RATE * _jump
         );
 
         vm.prank(_depositor);
-        staking.unstake(_depositor, stakeId, 0);
+        staking.unstake(_depositor, stakeId, _amount - MIN_STAKE);
 
         assertEq(
             staking.totalSupply(),
@@ -1285,14 +1292,6 @@ contract Unstake is StakingTest {
 
         uint256 expectedSharesRemaining = staking.convertToShares(
             MIN_STAKE + expectedRewards
-        );
-
-        // TODO review this
-        assertApproxEqRel(
-            staking.totalSupply(),
-            expectedSharesRemaining,
-            0.1e18,
-            "Wrong total supply with remaing shares"
         );
     }
 

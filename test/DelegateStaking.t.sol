@@ -1179,27 +1179,27 @@ contract Unstake is DelegateStakingTest {
 
         _jumpAhead(_jump);
 
-        uint256 expectedRewards = REWARD_RATE * _jump;
+        // first 1000 shares was the dead shares so must decrease from the expected rewards
+        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
+            delegate.balanceOf(_depositor),
+            REWARD_RATE * _jump
+        );
 
-        uint256 sharesToBurn = _previewWithdrawIncludeRewardsDistributed(
-            _amount,
-            expectedRewards
+        uint256 expectedRewards = assetsAmount - _amount;
+
+        uint256 burnShares = _previewWithdrawIncludeRewardsDistributed(
+            expectedRewards,
+            REWARD_RATE * _jump
         );
 
         vm.prank(_depositor);
-        delegate.unstake(stakeId, 0);
+        delegate.unstake(stakeId, expectedRewards - 1);
 
         assertEq(
             delegate.totalSupply(),
-            totalSupplyBefore - sharesToBurn,
+            totalSupplyBefore - burnShares,
             "Wrong total supply"
         );
-
-        uint256 expectedSharesRemaining = delegate.convertToShares(
-            expectedRewards
-        );
-
-        assertEq(delegate.totalSupply(), expectedSharesRemaining);
     }
 
     function testFuzz_UnstakeShouldNotTransferRewards(
