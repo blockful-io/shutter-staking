@@ -74,7 +74,7 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
 
     /// @notice Distribute rewards to receiver
     /// Caller must be the receiver
-    function collectRewards() public override returns (uint256 rewards) {
+    function collectRewards() external override returns (uint256 rewards) {
         RewardConfiguration storage rewardConfiguration = rewardConfigurations[
             msg.sender
         ];
@@ -139,7 +139,7 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
     function setRewardConfiguration(
         address receiver,
         uint256 emissionRate
-    ) public override onlyOwner {
+    ) external override onlyOwner {
         require(receiver != address(0), ZeroAddress());
 
         // to remove a rewards, it should call removeRewardConfiguration
@@ -162,7 +162,7 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
     /// @param receiver The receiver of the rewards
     function removeRewardConfiguration(
         address receiver
-    ) public override onlyOwner {
+    ) external override onlyOwner {
         rewardConfigurations[receiver].lastUpdate = 0;
         rewardConfigurations[receiver].emissionRate = 0;
 
@@ -171,7 +171,7 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
 
     /// @notice Set the reward token
     /// @param _rewardToken The reward token
-    function setRewardToken(address _rewardToken) public override onlyOwner {
+    function setRewardToken(address _rewardToken) external override onlyOwner {
         require(_rewardToken != address(0), ZeroAddress());
 
         // withdraw remaining old reward token
