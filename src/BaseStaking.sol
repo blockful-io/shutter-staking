@@ -2,13 +2,13 @@
 pragma solidity 0.8.26;
 
 import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import {ERC20VotesUpgradeable as ERC20} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
+import {ERC20VotesUpgradeable as ERC20Votes} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
 
 import {EnumerableSetLib} from "./libraries/EnumerableSetLib.sol";
 import {FixedPointMathLib} from "./libraries/FixedPointMathLib.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
-abstract contract BaseStaking is OwnableUpgradeable, ERC20 {
+abstract contract BaseStaking is OwnableUpgradeable, ERC20Votes {
     /*//////////////////////////////////////////////////////////////
                                  LIBRARIES
     //////////////////////////////////////////////////////////////*/
@@ -22,7 +22,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20 {
 
     /// @notice the staking token, i.e. SHU
     /// @dev set in initialize, can't be changed
-    ERC20 public stakingToken;
+    ERC20Votes public stakingToken;
 
     /// @notice the rewards distributor contract
     /// @dev only owner can change
@@ -96,8 +96,6 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20 {
     ///           maximum withdrawable amount. The maximum withdrawable amount
     ///           is the total amount of assets the user has minus the
     ///           total locked amount
-    ///         - If the claim results in a balance less than the total locked
-    ///            amount, the claim will be rejected
     ///         - The keyper can claim the rewards at any time as longs there is
     ///           a reward to claim
     /// @param amount The amount of rewards to claim

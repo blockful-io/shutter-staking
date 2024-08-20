@@ -3,15 +3,14 @@ pragma solidity 0.8.26;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
-import {SafeTransferLib} from "./libraries/SafeTransferLib.sol";
 import {IERC20} from "./interfaces/IERC20.sol";
 
+/**
+ * @title Shutter Rewards Distributor Contract
+ *
+ * This contract lets the owner distribute rewards to the Staking and DelegateStaking contracts.
+ */
 contract RewardsDistributor is Ownable, IRewardsDistributor {
-    /*//////////////////////////////////////////////////////////////
-                                 LIBRARIES
-    //////////////////////////////////////////////////////////////*/
-    using SafeTransferLib for IERC20;
-
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
     //////////////////////////////////////////////////////////////*/
@@ -30,7 +29,7 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
     }
 
     /*//////////////////////////////////////////////////////////////
-                                MAPPINGS
+                                 MAPPINGS
     //////////////////////////////////////////////////////////////*/
 
     mapping(address receiver => RewardConfiguration configuration)
@@ -95,7 +94,7 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
         rewardConfiguration.lastUpdate = block.timestamp;
 
         // transfer the reward
-        rewardToken.safeTransfer(msg.sender, rewards);
+        rewardToken.transfer(msg.sender, rewards);
 
         emit RewardCollected(msg.sender, rewards);
     }
@@ -129,7 +128,7 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
         rewardConfiguration.lastUpdate = block.timestamp;
 
         // transfer the reward
-        rewardToken.safeTransfer(receiver, rewards);
+        rewardToken.transfer(receiver, rewards);
 
         emit RewardCollected(receiver, rewards);
     }

@@ -6,11 +6,10 @@
     inherits from OpenZeppelin's ERC20VotesUpgradeable and
     OwnableUpgradeable.
 -   The contract overrides the `transfer` and
-    `transferFrom` functions to prevent the sSHU token from being transferred. All
+    `transferFrom` functions to prevent the dSHU token from being transferred. All
     the other inherited functions follow the OpenZeppelin implementation.
 -   To avoid rounding errors, the contract uses the FixedPointMathLib from Solmate
     library.
--   The contract uses SafeTransferLib from solmate to interact with the SHU token.
 -   The choosen mechanism for the rewards distribution is a ERC4626 vault implementation.
 
 ## Variables
@@ -112,3 +111,5 @@ Get a list of stake ids belonging to a user.
 
 -   The contract doesn't use the Ownable2Step pattern due to the 24KB contract
     size limit.
+-   The contract doesn't use safe transfer as the only token that can be
+    transferred is the SHU token, which is a trusted token.

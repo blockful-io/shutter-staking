@@ -29,19 +29,41 @@ struct RewardConfiguration {
 
 ### `setRewardConfiguration(address receiver, uint256 emissionRate)`
 
-Add, update or stop distributing rewards to a receiver. The emission rate is
+Add, or update the distributing rewards to a receiver. The emission rate is
 the number of reward tokens distributed per second. This function can only be
 called by the Owner (DAO). If the emission rate for the specified receiver is not 0,
 the function will update the `emissionRate`. If the owner wants to stop
-distributing rewards, they should set the emission rate to 0.
+distributing rewards, they should call `removeRewardConfiguration`.
+
+### `removeRewardConfiguration(address receiver)`
+
+Remove the reward configuration for a specific receiver. This function can only
+be called by the Owner.
+
+### `setRewardToken(address rewardToken)`
+
+This function can only be called by the Owner.
+This function will first withdraw all the rewards from the previous reward
+token and send them to the owner. Then it will set the new reward token
+address.
+
+### `withdrawFunds(address token, address to, uint256 amount)`
+
+This function is useful in case someone transfer tokens to the contract by
+mistake. The owner can withdraw any ERC20 token from the contract.
 
 ## Permissionless Functions
 
-### `distributionRewards()`
+### `collectRewards()`
 
-Distribute all the rewards to the receiver contract accumulated until from the
-`lastUpdate` timestamp to the current timestamp. If the msg.sender is not one of
-the receivers, the function will revert.
+Distribute all the rewards to the receiver contract (msg.sender) accumulated until from the
+`lastUpdate` timestamp to the current timestamp.
+
+### `collectRewardsTo(address receiver)`
+
+Distribute all the rewards to the specified receiver contract accumulated until
+from the `lastUpdate` timestamp to the current timestamp. If the receiver is
+not a valid receiver, the function will revert.
 
 ## View Functions
 

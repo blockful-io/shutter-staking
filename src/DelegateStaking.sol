@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {ERC20VotesUpgradeable as ERC20Votes} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
+
 import {BaseStaking} from "./BaseStaking.sol";
-import {IERC20} from "./interfaces/IERC20.sol";
 import {EnumerableSetLib} from "./libraries/EnumerableSetLib.sol";
-import {FixedPointMathLib} from "./libraries/FixedPointMathLib.sol";
-import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
-import {ERC20VotesUpgradeable as ERC20} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
 interface IStaking {
@@ -126,7 +124,7 @@ contract DelegateStaking is BaseStaking {
         __ERC20_init("Delegated Staking SHU", "dSHU");
 
         staking = IStaking(_stakingContract);
-        stakingToken = ERC20(_stakingToken);
+        stakingToken = ERC20Votes(_stakingToken);
         rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
         lockPeriod = _lockPeriod;
 
