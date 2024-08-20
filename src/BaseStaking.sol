@@ -52,9 +52,6 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20 {
     /// @notice Emitted when a keyper claims rewards
     event RewardsClaimed(address indexed user, uint256 rewards);
 
-    /// @notice Emitted when the lock period is changed
-    event NewLockPeriod(uint256 indexed lockPeriod);
-
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -154,8 +151,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20 {
     /// @param _lockPeriod The lock period in seconds
     function setLockPeriod(uint256 _lockPeriod) public onlyOwner {
         lockPeriod = _lockPeriod;
-
-        emit NewLockPeriod(_lockPeriod);
+        // no events for this function due to 24kb contract size limit
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -168,6 +164,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20 {
         uint256 assets
     ) public view virtual returns (uint256) {
         uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
+
         return supply == 0 ? assets : assets.mulDivDown(supply, _totalAssets());
     }
 

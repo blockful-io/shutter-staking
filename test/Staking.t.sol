@@ -1512,16 +1512,12 @@ contract OwnableFunctions is StakingTest {
     }
 
     function testFuzz_setLockPeriod(uint256 _newLockPeriod) public {
-        vm.expectEmit();
-        emit BaseStaking.NewLockPeriod(_newLockPeriod);
         staking.setLockPeriod(_newLockPeriod);
 
         assertEq(staking.lockPeriod(), _newLockPeriod, "Wrong lock period");
     }
 
     function testFuzz_setMinStake(uint256 _newMinStake) public {
-        vm.expectEmit();
-        emit Staking.NewMinStake(_newMinStake);
         staking.setMinStake(_newMinStake);
 
         assertEq(staking.minStake(), _newMinStake, "Wrong min stake");

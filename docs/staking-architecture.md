@@ -153,8 +153,7 @@ Calculates the maximum amount of assets that a keyper can withdraw, which
 represents the rewards accumulated and not claimed yet. This doesn't include
 unlocked stakes.
 
--   if the keyper has no shares, the function will revert.
--   if the keyper sSHU balance is less or equal than the minimum stake or the total locked amount, the function will return 0.
+-   if the keyper sSHU balance is less or equal than the total locked amount, the function will return 0.
 
 ## Security Considerations
 

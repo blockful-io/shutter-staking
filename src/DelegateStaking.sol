@@ -126,10 +126,14 @@ contract DelegateStaking is BaseStaking {
         __ERC20_init("Delegated Staking SHU", "dSHU");
 
         staking = IStaking(_stakingContract);
-        nextStakeId = 1;
         stakingToken = ERC20(_stakingToken);
         rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
         lockPeriod = _lockPeriod;
+
+        nextStakeId = 1;
+        _transferOwnership(_owner);
+
+        __BaseStaking_init();
     }
 
     /// @notice Stake SHU

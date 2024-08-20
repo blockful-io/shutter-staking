@@ -1399,10 +1399,6 @@ contract OwnableFunctions is DelegateStakingTest {
     }
 
     function testFuzz_setLockPeriod(uint256 _newLockPeriod) public {
-        vm.expectEmit();
-
-        emit BaseStaking.NewLockPeriod(_newLockPeriod);
-
         delegate.setLockPeriod(_newLockPeriod);
 
         assertEq(delegate.lockPeriod(), _newLockPeriod, "Wrong lock period");

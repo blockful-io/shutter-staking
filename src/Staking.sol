@@ -81,9 +81,6 @@ contract Staking is BaseStaking {
     /// @notice Emitted when a keyper is added or removed
     event KeyperSet(address indexed keyper, bool isKeyper);
 
-    /// @notice Emitted when the minimum stake is changed
-    event NewMinStake(uint256 indexed minStake);
-
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
@@ -125,10 +122,14 @@ contract Staking is BaseStaking {
         __ERC20_init("Staked SHU", "sSHU");
 
         minStake = _minStake;
-        nextStakeId = 1;
         stakingToken = ERC20(_stakingToken);
         rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
         lockPeriod = _lockPeriod;
+
+        nextStakeId = 1;
+        _transferOwnership(_owner);
+
+        __BaseStaking_init();
     }
 
     /// @notice Stake SHU
@@ -256,12 +257,12 @@ contract Staking is BaseStaking {
     /*//////////////////////////////////////////////////////////////
                          RESTRICTED FUNCTIONS
     //////////////////////////////////////////////////////////////*/
-    /// @notice Set the minimum stake amount
 
+    /// @notice Set the minimum stake amount
     /// @param _minStake The minimum stake amount
     function setMinStake(uint256 _minStake) external onlyOwner {
         minStake = _minStake;
-        emit NewMinStake(_minStake);
+        // no events for this function due to 24kb contract size limit
     }
 
     /// @notice Set a keyper
