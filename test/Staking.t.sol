@@ -744,8 +744,6 @@ contract Stake is StakingTest {
         vm.prank(bob);
         staking.unstake(bob, bobStakeId, bobStake - MIN_STAKE - 1e17);
 
-        uint256 bobBalance = govToken.balanceOf(bob);
-
         assertApproxEqRel(
             govToken.balanceOf(bob),
             bobStake - MIN_STAKE,
@@ -830,7 +828,6 @@ contract ClaimRewards is StakingTest {
 
         _stake(_depositor, _amount);
 
-        uint256 timestampBefore = vm.getBlockTimestamp();
         uint256 sharesBefore = staking.balanceOf(_depositor);
 
         _jumpAhead(_jump);
@@ -981,8 +978,6 @@ contract ClaimRewards is StakingTest {
         _setKeyper(_depositor, true);
 
         _stake(_depositor, _amount);
-
-        uint256 timestampBefore = vm.getBlockTimestamp();
 
         _jumpAhead(_jump);
 

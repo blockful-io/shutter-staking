@@ -720,7 +720,7 @@ contract Stake is DelegateStakingTest {
         // alice withdraw rewards (bob stake) even when there is no rewards distributed
         vm.startPrank(alice);
         delegate.unstake(aliceStakeId, 0);
-        uint256 aliceRewards = delegate.claimRewards(0);
+        delegate.claimRewards(0);
         vm.stopPrank();
 
         uint256 aliceBalanceAfterAttack = govToken.balanceOf(alice);
@@ -731,10 +731,6 @@ contract Stake is DelegateStakingTest {
             aliceBalanceAfterAttack,
             18,
             "Alice receive more than expend for the attack"
-        );
-
-        uint256 maxBobWithdrawable = delegate.convertToAssets(
-            delegate.balanceOf(bob)
         );
 
         vm.startPrank(bob);
