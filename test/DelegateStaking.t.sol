@@ -1636,7 +1636,7 @@ contract ViewFunctions is DelegateStakingTest {
         _mintGovToken(_depositor, _amount);
         _setKeyper(_keyper, true);
 
-        uint256 stakeId = _stake(_depositor, _keyper, _amount);
+        _stake(_depositor, _keyper, _amount);
 
         uint256 withdrawAmount = delegate.exposed_calculateWithdrawAmount(
             _amount / 2,
