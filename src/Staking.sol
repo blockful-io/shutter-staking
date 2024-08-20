@@ -92,9 +92,6 @@ contract Staking is BaseStaking {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
-    /// @notice Thrown when a user has no shares
-    error UserHasNoShares();
-
     /// @notice Thrown when a non-keyper attempts a call for which only keypers are allowed
     error OnlyKeyper();
 
@@ -141,17 +138,7 @@ contract Staking is BaseStaking {
 
         nextStakeId = 1;
 
-        // mint dead shares to avoid inflation attack
-        uint256 amount = 10_000e18;
-
-        // Calculate the amount of shares to mint
-        uint256 shares = convertToShares(amount);
-
-        // Mint the shares to the vault
-        _mint(address(this), shares);
-
-        // Lock the SHU in the contract
-        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+        __init_deadShares();
     }
 
     /// @notice Stake SHU
@@ -165,7 +152,7 @@ contract Staking is BaseStaking {
     /// @return stakeId The index of the stake
     function stake(
         uint256 amount
-    ) external updateRewards returns (uint256 stakeId) {
+    ) public updateRewards returns (uint256 stakeId) {
         require(keypers[msg.sender], OnlyKeyper());
 
         require(amount > 0, ZeroAmount());
@@ -188,7 +175,7 @@ contract Staking is BaseStaking {
         stakes[stakeId].timestamp = block.timestamp;
         stakes[stakeId].lockPeriod = lockPeriod;
 
-        _deposit(msg.sender, amount);
+        _deposit(amount);
 
         emit Staked(msg.sender, amount, lockPeriod);
     }
@@ -256,10 +243,12 @@ contract Staking is BaseStaking {
         }
 
         // Decrease the amount from the stake
-        stakes[stakeId].amount -= amount;
+        unchecked {
+            stakes[stakeId].amount -= amount;
+        }
 
         // If the stake is empty, remove it
-        if (stakes[stakeId].amount == 0) {
+        if (keyperStake.amount == 0) {
             // Remove the stake from the stakes mapping
             delete stakes[stakeId];
 
@@ -290,30 +279,5 @@ contract Staking is BaseStaking {
     function setKeyper(address keyper, bool isKeyper) external onlyOwner {
         keypers[keyper] = isKeyper;
         emit KeyperSet(keyper, isKeyper);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                                OVERRIDE
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Get the maximum amount of assets that a keyper can withdraw
-    ////         - if the keyper has no shares, the function will revert
-    ///          - if the keyper sSHU balance is less or equal than the minimum stake or the total
-    ///            locked amount, the function will return 0
-    /// @param keyper The keyper address
-    /// @return amount The maximum amount of assets that a keyper can withdraw
-    function maxWithdraw(
-        address keyper
-    ) public view override returns (uint256 amount) {
-        uint256 assets = convertToAssets(balanceOf(keyper));
-        require(assets > 0, UserHasNoShares());
-
-        unchecked {
-            uint256 locked = totalLocked[keyper];
-            uint256 compare = locked >= minStake ? locked : minStake;
-
-            // need the first branch as convertToAssets rounds down
-            amount = compare >= assets ? 0 : assets - compare;
-        }
     }
 }

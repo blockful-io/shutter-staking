@@ -76,10 +76,8 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
     /// @notice Distribute rewards to receiver
     /// Caller must be the receiver
     function collectRewards() public override returns (uint256 rewards) {
-        address receiver = msg.sender;
-
         RewardConfiguration storage rewardConfiguration = rewardConfigurations[
-            receiver
+            msg.sender
         ];
 
         // difference in time since last update
@@ -97,9 +95,9 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
         rewardConfiguration.lastUpdate = block.timestamp;
 
         // transfer the reward
-        rewardToken.safeTransfer(receiver, rewards);
+        rewardToken.safeTransfer(msg.sender, rewards);
 
-        emit RewardCollected(receiver, rewards);
+        emit RewardCollected(msg.sender, rewards);
     }
 
     /// @notice Send rewards to receiver
@@ -163,7 +161,9 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
 
     /// @notice Remove a reward configuration
     /// @param receiver The receiver of the rewards
-    function removeRewardConfiguration(address receiver) public onlyOwner {
+    function removeRewardConfiguration(
+        address receiver
+    ) public override onlyOwner {
         rewardConfigurations[receiver].lastUpdate = 0;
         rewardConfigurations[receiver].emissionRate = 0;
 
@@ -172,7 +172,7 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
 
     /// @notice Set the reward token
     /// @param _rewardToken The reward token
-    function setRewardToken(address _rewardToken) public onlyOwner {
+    function setRewardToken(address _rewardToken) public override onlyOwner {
         require(_rewardToken != address(0), ZeroAddress());
 
         // withdraw remaining old reward token
@@ -195,7 +195,7 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
         address token,
         address to,
         uint256 amount
-    ) public onlyOwner {
+    ) public override onlyOwner {
         require(to != address(0), ZeroAddress());
         IERC20(token).safeTransfer(to, amount);
     }

@@ -13,7 +13,7 @@ import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
 abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /*//////////////////////////////////////////////////////////////
-                               LIBRARIES
+                                 LIBRARIES
     //////////////////////////////////////////////////////////////*/
     using EnumerableSetLib for EnumerableSetLib.Uint256Set;
 
@@ -41,7 +41,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     uint256 internal nextStakeId;
 
     /*//////////////////////////////////////////////////////////////
-                                MAPPINGS
+                                 MAPPINGS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice how many SHU a user has locked
@@ -79,8 +79,8 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /// @notice Thrown when the argument is the zero address
     error AddressZero();
 
-    /// @notice Thrown when the amount of shares is 0
-    error SharesMustBeGreaterThanZero();
+    /// @notice Thrown when a user has no shares
+    error UserHasNoShares();
 
     /*//////////////////////////////////////////////////////////////
                                  MODIFIERS
@@ -99,6 +99,21 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
         _disableInitializers();
     }
 
+    /// TODO add natspec
+    function __init_deadShares() internal {
+        // mint dead shares to avoid inflation attack
+        uint256 amount = 10_000e18;
+
+        // Calculate the amount of shares to mint
+        uint256 shares = convertToShares(amount);
+
+        // Mint the shares to the vault
+        _mint(address(this), shares);
+
+        // Transfer the SHU to the vault
+        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+    }
+
     /// @notice Claim rewards
     ///         - If no amount is specified, will claim all the rewards
     ///         - If the amount is specified, the amount must be less than the
@@ -112,51 +127,22 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /// @param amount The amount of rewards to claim
     function claimRewards(
         uint256 amount
-    ) external updateRewards returns (uint256 rewards) {
-        address user = msg.sender;
-
+    ) public updateRewards returns (uint256 rewards) {
         // Prevents the keyper from claiming more than they should
-        uint256 maxWithdrawAmount = maxWithdraw(user);
-
-        rewards = _calculateWithdrawAmount(amount, maxWithdrawAmount);
-
+        rewards = _calculateWithdrawAmount(amount, maxWithdraw(msg.sender));
         require(rewards > 0, NoRewardsToClaim());
 
         // Calculates the amount of shares to burn
-        uint256 shares = _previewWithdraw(rewards);
+        _burn(msg.sender, _previewWithdraw(rewards));
+        stakingToken.safeTransfer(msg.sender, rewards);
 
-        _burn(user, shares);
-
-        stakingToken.safeTransfer(user, rewards);
-
-        emit RewardsClaimed(user, rewards);
+        emit RewardsClaimed(msg.sender, rewards);
     }
 
-    /*//////////////////////////////////////////////////////////////
-                         RESTRICTED FUNCTIONS
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Set the rewards distributor contract
-    /// @param _rewardsDistributor The address of the rewards distributor contract
-    function setRewardsDistributor(
-        address _rewardsDistributor
-    ) external onlyOwner {
-        require(_rewardsDistributor != address(0), AddressZero());
-        rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
-        // no events for this function due to 24kb contract size limit
+    /// @notice Get the amount of SHU staked for all keypers
+    function totalAssets() public view returns (uint256) {
+        return stakingToken.balanceOf(address(this));
     }
-
-    /// @notice Set the lock period
-    /// @param _lockPeriod The lock period in seconds
-    function setLockPeriod(uint256 _lockPeriod) external onlyOwner {
-        lockPeriod = _lockPeriod;
-
-        emit NewLockPeriod(_lockPeriod);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                              TRANSFER LOGIC
-    //////////////////////////////////////////////////////////////*/
 
     /// @notice Transfer is disabled
     function transfer(address, uint256) public pure override returns (bool) {
@@ -173,6 +159,29 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     }
 
     /*//////////////////////////////////////////////////////////////
+                         RESTRICTED FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
+
+    /// @notice Set the rewards distributor contract
+    /// @param _rewardsDistributor The address of the rewards distributor contract
+    function setRewardsDistributor(
+        address _rewardsDistributor
+    ) public onlyOwner {
+        require(_rewardsDistributor != address(0), AddressZero());
+        rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
+        // no events for this function due to 24kb contract size limit
+        // TODO check if we can add event emission back
+    }
+
+    /// @notice Set the lock period
+    /// @param _lockPeriod The lock period in seconds
+    function setLockPeriod(uint256 _lockPeriod) public onlyOwner {
+        lockPeriod = _lockPeriod;
+
+        emit NewLockPeriod(_lockPeriod);
+    }
+
+    /*//////////////////////////////////////////////////////////////
                               VIEW FUNCTIONS
     //////////////////////////////////////////////////////////////*/
 
@@ -182,8 +191,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
         uint256 assets
     ) public view virtual returns (uint256) {
         uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? assets : assets.mulDivDown(supply, _totalAssets());
+        return supply == 0 ? assets : assets.mulDivDown(supply, totalAssets());
     }
 
     /// @notice Get the total amount of assets the shares are worth
@@ -192,8 +200,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
         uint256 shares
     ) public view virtual returns (uint256) {
         uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? shares : shares.mulDivDown(_totalAssets(), supply);
+        return supply == 0 ? shares : shares.mulDivDown(totalAssets(), supply);
     }
 
     /// @notice Get the stake ids belonging to a user
@@ -205,7 +212,18 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
 
     /// @notice Get the total amount of assets that a keyper can withdraw
     /// @dev must be implemented by the child contract
-    function maxWithdraw(address user) public view virtual returns (uint256);
+    function maxWithdraw(address user) public view returns (uint256 amount) {
+        uint256 shares = balanceOf(user);
+        require(shares > 0, UserHasNoShares());
+
+        uint256 assets = convertToAssets(shares);
+        uint256 locked = totalLocked[user];
+
+        unchecked {
+            // need the first branch as convertToAssets rounds down
+            amount = locked >= assets ? 0 : assets - locked;
+        }
+    }
 
     /*//////////////////////////////////////////////////////////////
                           INTERNAL FUNCTIONS
@@ -213,20 +231,17 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
 
     /// @notice Deposit SHU into the contract
     /// @param amount The amount of SHU to deposit
-    function _deposit(address to, uint256 amount) internal {
-        // Calculate the amount of shares to mint
-        uint256 shares = convertToShares(amount);
-
+    function _deposit(uint256 amount) internal {
         // Update the total locked amount
         unchecked {
-            totalLocked[to] += amount;
+            totalLocked[msg.sender] += amount;
         }
 
         // Mint the shares
-        _mint(to, shares);
+        _mint(msg.sender, convertToShares(amount));
 
         // Lock the SHU in the contract
-        stakingToken.safeTransferFrom(to, address(this), amount);
+        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
     }
 
     /// @notice Withdraw SHU from the contract
@@ -238,12 +253,10 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     ) internal returns (uint256 shares) {
         shares = _previewWithdraw(amount);
 
-        console.log("balance ", balanceOf(user));
-        console.log("needs ", shares);
-        console.log("to withdraw", amount);
-
-        // Decrease the amount from the total locked
-        totalLocked[user] -= amount;
+        unchecked {
+            // Decrease the amount from the total locked
+            totalLocked[user] -= amount;
+        }
 
         // Burn the shares
         _burn(user, shares);
@@ -252,17 +265,11 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
         stakingToken.safeTransfer(user, amount);
     }
 
-    /// @notice Get the amount of SHU staked for all keypers
-    function _totalAssets() internal view returns (uint256) {
-        return stakingToken.balanceOf(address(this));
-    }
-
     /// @notice Get the amount of shares that will be burned
     /// @param assets The amount of assets
     function _previewWithdraw(uint256 assets) internal view returns (uint256) {
         uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
-        return supply == 0 ? assets : assets.mulDivUp(supply, _totalAssets());
+        return supply == 0 ? assets : assets.mulDivUp(supply, totalAssets());
     }
 
     /// @notice Calculates the amount to withdraw

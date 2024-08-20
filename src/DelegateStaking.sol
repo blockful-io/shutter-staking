@@ -39,7 +39,7 @@ interface IStaking {
  */
 contract DelegateStaking is BaseStaking {
     /*//////////////////////////////////////////////////////////////
-                               LIBRARIES
+                                 LIBRARIES
     //////////////////////////////////////////////////////////////*/
     using EnumerableSetLib for EnumerableSetLib.Uint256Set;
 
@@ -67,7 +67,7 @@ contract DelegateStaking is BaseStaking {
     }
 
     /*//////////////////////////////////////////////////////////////
-                                MAPPINGS
+                                 MAPPINGS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice stores the metadata associated with a given stake
@@ -97,9 +97,6 @@ contract DelegateStaking is BaseStaking {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
-
-    /// @notice Thrown when a user has no shares
-    error UserHasNoShares();
 
     /// @notice Trown when amount is zero
     error ZeroAmount();
@@ -143,17 +140,7 @@ contract DelegateStaking is BaseStaking {
 
         nextStakeId = 1;
 
-        // mint dead shares to avoid inflation attack
-        uint256 amount = 10_000e18;
-
-        // Calculate the amount of shares to mint
-        uint256 shares = convertToShares(amount);
-
-        // Mint the shares to the vault
-        _mint(address(this), shares);
-
-        // Transfer the SHU to the vault
-        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+        __init_deadShares();
     }
 
     /// @notice Stake SHU
@@ -166,7 +153,7 @@ contract DelegateStaking is BaseStaking {
     function stake(
         address keyper,
         uint256 amount
-    ) external updateRewards returns (uint256 stakeId) {
+    ) public updateRewards returns (uint256 stakeId) {
         require(amount > 0, ZeroAmount());
 
         require(staking.keypers(keyper), AddressIsNotAKeyper());
@@ -187,7 +174,7 @@ contract DelegateStaking is BaseStaking {
             totalDelegated[keyper] += amount;
         }
 
-        _deposit(msg.sender, amount);
+        _deposit(amount);
 
         emit Staked(msg.sender, keyper, amount, lockPeriod);
     }
@@ -211,8 +198,10 @@ contract DelegateStaking is BaseStaking {
         uint256 stakeId,
         uint256 _amount
     ) external updateRewards returns (uint256 amount) {
-        address user = msg.sender;
-        require(userStakes[user].contains(stakeId), StakeDoesNotBelongToUser());
+        require(
+            userStakes[msg.sender].contains(stakeId),
+            StakeDoesNotBelongToUser()
+        );
         Stake memory userStake = stakes[stakeId];
 
         require(userStake.amount > 0, StakeDoesNotExist());
@@ -227,16 +216,18 @@ contract DelegateStaking is BaseStaking {
             ? lockPeriod
             : userStake.lockPeriod;
 
-        require(
-            block.timestamp > userStake.timestamp + lock,
-            StakeIsStillLocked()
-        );
+        unchecked {
+            require(
+                block.timestamp > userStake.timestamp + lock,
+                StakeIsStillLocked()
+            );
 
-        // Decrease the amount from the stake
-        stakes[stakeId].amount -= amount;
+            // Decrease the amount from the stake
+            stakes[stakeId].amount -= amount;
 
-        // Decrease the total delegated amount
-        totalDelegated[userStake.keyper] -= amount;
+            // Decrease the total delegated amount
+            totalDelegated[userStake.keyper] -= amount;
+        }
 
         // If the stake is empty, remove it
         if (stakes[stakeId].amount == 0) {
@@ -244,12 +235,12 @@ contract DelegateStaking is BaseStaking {
             delete stakes[stakeId];
 
             // Remove the stake from the user stakes
-            userStakes[user].remove(stakeId);
+            userStakes[msg.sender].remove(stakeId);
         }
 
-        uint256 shares = _withdraw(user, amount);
+        uint256 shares = _withdraw(msg.sender, amount);
 
-        emit Unstaked(user, amount, shares);
+        emit Unstaked(msg.sender, amount, shares);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -267,31 +258,5 @@ contract DelegateStaking is BaseStaking {
         staking = IStaking(_stakingContract);
 
         emit NewStakingContract(_stakingContract);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                                OVERRIDE
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Get the maximum amount of assets that a keyper can withdraw
-    ////         - if the user has no shares, the function will revert
-    ///          - if the user dSHU balance is less or equal than the total
-    ///            locked amount, the function will return 0
-    /// @param user The user address
-    /// @return amount The maximum amount of assets that a user can withdraw
-    function maxWithdraw(
-        address user
-    ) public view override returns (uint256 amount) {
-        uint256 shares = balanceOf(user);
-        require(shares > 0, UserHasNoShares());
-
-        uint256 assets = convertToAssets(shares);
-        console.log("user assets", assets);
-        uint256 locked = totalLocked[user];
-        console.log("locked", locked);
-
-        // need the first branch as convertToAssets rounds down
-        amount = locked >= assets ? 0 : assets - locked;
-        console.log("max withdrawable", amount);
     }
 }
