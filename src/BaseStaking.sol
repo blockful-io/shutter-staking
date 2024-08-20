@@ -148,7 +148,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20Votes {
     /// @param _rewardsDistributor The address of the rewards distributor contract
     function setRewardsDistributor(
         address _rewardsDistributor
-    ) public onlyOwner {
+    ) external onlyOwner {
         require(_rewardsDistributor != address(0), AddressZero());
         rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
         // no events for this function due to 24kb contract size limit
@@ -156,7 +156,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20Votes {
 
     /// @notice Set the lock period
     /// @param _lockPeriod The lock period in seconds
-    function setLockPeriod(uint256 _lockPeriod) public onlyOwner {
+    function setLockPeriod(uint256 _lockPeriod) external onlyOwner {
         lockPeriod = _lockPeriod;
         // no events for this function due to 24kb contract size limit
     }
