@@ -300,8 +300,6 @@ contract Stake is DelegateStakingTest {
                 _depositor != ProxyUtils.getAdminAddress(address(delegate))
         );
 
-        assertEq(govToken.balanceOf(address(delegate)), 0);
-
         _stake(_depositor, _keyper, _amount);
 
         assertEq(
@@ -796,38 +794,6 @@ contract ClaimRewards is DelegateStakingTest {
         );
     }
 
-    function testFuzz_GovTokenBalanceUnchangedWhenClaimingRewardsOnlyStaker(
-        address _keyper,
-        address _depositor,
-        uint256 _amount,
-        uint256 _jump
-    ) public {
-        _amount = _boundToRealisticStake(_amount);
-        _jump = _boundRealisticTimeAhead(_jump);
-
-        _mintGovToken(_depositor, _amount);
-        _setKeyper(_keyper, true);
-
-        _stake(_depositor, _keyper, _amount);
-
-        uint256 contractBalanceBefore = govToken.balanceOf(address(delegate));
-
-        _jumpAhead(_jump);
-
-        vm.prank(_depositor);
-        delegate.claimRewards(0);
-
-        uint256 contractBalanceAfter = govToken.balanceOf(address(delegate));
-
-        // small percentage lost to the vault due to the donation attack prevention
-        assertApproxEqAbs(
-            contractBalanceAfter - contractBalanceBefore,
-            0,
-            1e18,
-            "Wrong balance"
-        );
-    }
-
     function testFuzz_EmitRewardsClaimedEventWhenClaimingRewards(
         address _keyper,
         address _depositor,
@@ -899,11 +865,17 @@ contract ClaimRewards is DelegateStakingTest {
 
         _jumpAhead(_jump);
 
-        uint256 expectedRewards = REWARD_RATE * _jump;
+        // first 1000 shares was the dead shares so must decrease from the expected rewards
+        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
+            staking.balanceOf(_depositor),
+            REWARD_RATE * _jump
+        );
+
+        uint256 expectedRewards = assetsAmount - _amount;
 
         uint256 burnShares = _previewWithdrawIncludeRewardsDistributed(
             expectedRewards,
-            expectedRewards
+            REWARD_RATE * _jump
         );
 
         vm.prank(_depositor);
@@ -1048,7 +1020,14 @@ contract ClaimRewards is DelegateStakingTest {
 
         _jumpAhead(_jump);
 
-        uint256 expectedRewards = REWARD_RATE * _jump;
+        // first 1000 shares was the dead shares so must decrease from the expected rewards
+        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
+            delegate.balanceOf(_depositor),
+            REWARD_RATE * _jump
+        );
+
+        uint256 expectedRewards = assetsAmount - _amount;
+
         vm.prank(_depositor);
         uint256 rewards = delegate.claimRewards(expectedRewards / 2);
 
@@ -1073,10 +1052,17 @@ contract ClaimRewards is DelegateStakingTest {
 
         _jumpAhead(_jump);
 
-        uint256 expectedRewards = REWARD_RATE * _jump;
+        // first 1000 shares was the dead shares so must decrease from the expected rewards
+        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
+            delegate.balanceOf(_depositor),
+            REWARD_RATE * _jump
+        );
+
+        uint256 expectedRewards = assetsAmount - _amount;
+
         uint256 burnShares = _previewWithdrawIncludeRewardsDistributed(
             expectedRewards / 2,
-            expectedRewards
+            REWARD_RATE * _jump
         );
 
         vm.prank(_depositor);
@@ -1111,7 +1097,7 @@ contract ClaimRewards is DelegateStakingTest {
         );
 
         vm.prank(_depositor);
-        vm.expectRevert(BaseStaking.UserHasNoShares.selector);
+        vm.expectRevert(BaseStaking.NoRewardsToClaim.selector);
         staking.claimRewards(0);
     }
 

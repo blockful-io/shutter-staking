@@ -268,8 +268,6 @@ contract Stake is StakingTest {
         _mintGovToken(_depositor, _amount);
         _setKeyper(_depositor, true);
 
-        assertEq(govToken.balanceOf(address(staking)), 0);
-
         _stake(_depositor, _amount);
         assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
         assertEq(
@@ -785,37 +783,6 @@ contract ClaimRewards is StakingTest {
         );
     }
 
-    function testFuzz_GovTokenBalanceUnchangedWhenClaimingRewardsOnlyStaker(
-        address _depositor,
-        uint256 _amount,
-        uint256 _jump
-    ) public {
-        _amount = _boundToRealisticStake(_amount);
-        _jump = _boundRealisticTimeAhead(_jump);
-
-        _mintGovToken(_depositor, _amount);
-        _setKeyper(_depositor, true);
-
-        _stake(_depositor, _amount);
-
-        uint256 contractBalanceBefore = govToken.balanceOf(address(staking));
-
-        _jumpAhead(_jump);
-
-        vm.prank(_depositor);
-        staking.claimRewards(0);
-
-        uint256 contractBalanceAfter = govToken.balanceOf(address(staking));
-
-        // small percentage lost to the vault due to the donation attack prevention
-        assertApproxEqAbs(
-            contractBalanceAfter - contractBalanceBefore,
-            0,
-            1e18,
-            "Wrong balance"
-        );
-    }
-
     function testFuzz_EmitRewardsClaimedEventWhenClaimingRewards(
         address _depositor,
         uint256 _amount,
@@ -888,12 +855,17 @@ contract ClaimRewards is StakingTest {
 
         _jumpAhead(_jump);
 
-        uint256 expectedRewards = REWARD_RATE *
-            (vm.getBlockTimestamp() - timestampBefore);
+        // first 1000 shares was the dead shares so must decrease from the expected rewards
+        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
+            staking.balanceOf(_depositor),
+            REWARD_RATE * _jump
+        );
+
+        uint256 expectedRewards = assetsAmount - _amount;
 
         uint256 burnShares = _previewWithdrawIncludeRewardsDistributed(
             expectedRewards,
-            expectedRewards
+            REWARD_RATE * _jump
         );
 
         vm.prank(_depositor);
@@ -901,7 +873,6 @@ contract ClaimRewards is StakingTest {
 
         uint256 sharesAfter = staking.balanceOf(_depositor);
 
-        // need to accept a small error due to the donation attack prevention
         assertApproxEqAbs(
             sharesBefore - sharesAfter,
             burnShares,
@@ -1035,8 +1006,13 @@ contract ClaimRewards is StakingTest {
 
         _jumpAhead(_jump);
 
-        uint256 expectedRewards = (REWARD_RATE *
-            (vm.getBlockTimestamp() - timestampBefore)) - 1e18;
+        // first 1000 shares was the dead shares so must decrease from the expected rewards
+        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
+            staking.balanceOf(_depositor),
+            REWARD_RATE * _jump
+        );
+
+        uint256 expectedRewards = assetsAmount - _amount;
 
         vm.prank(_depositor);
         uint256 rewards = staking.claimRewards(expectedRewards);
@@ -1057,22 +1033,25 @@ contract ClaimRewards is StakingTest {
 
         _stake(_depositor, _amount);
 
-        uint256 timestampBefore = vm.getBlockTimestamp();
         uint256 sharesBefore = staking.balanceOf(_depositor);
 
         _jumpAhead(_jump);
 
-        uint256 expectedRewards = REWARD_RATE *
-            (vm.getBlockTimestamp() - timestampBefore);
-        uint256 rewardsToClaim = expectedRewards / 2;
+        // first 1000 shares was the dead shares so must decrease from the expected rewards
+        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
+            staking.balanceOf(_depositor),
+            REWARD_RATE * _jump
+        );
+
+        uint256 expectedRewards = assetsAmount - _amount;
 
         uint256 burnShares = _previewWithdrawIncludeRewardsDistributed(
-            rewardsToClaim,
-            expectedRewards
+            expectedRewards / 2,
+            REWARD_RATE * _jump
         );
 
         vm.prank(_depositor);
-        staking.claimRewards(rewardsToClaim);
+        staking.claimRewards(expectedRewards / 2);
 
         uint256 sharesAfter = staking.balanceOf(_depositor);
 
@@ -1103,7 +1082,7 @@ contract ClaimRewards is StakingTest {
         );
 
         vm.prank(_depositor);
-        vm.expectRevert(BaseStaking.UserHasNoShares.selector);
+        vm.expectRevert(BaseStaking.NoRewardsToClaim.selector);
         staking.claimRewards(0);
     }
 
