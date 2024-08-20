@@ -930,11 +930,17 @@ contract ClaimRewards is DelegateStakingTest {
 
         _jumpAhead(_jump);
 
-        uint256 expectedRewards = REWARD_RATE * _jump;
+        // first 1000 shares was the dead shares so must decrease from the expected rewards
+        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
+            delegate.balanceOf(_depositor),
+            REWARD_RATE * _jump
+        );
+
+        uint256 expectedRewards = assetsAmount - _amount;
 
         uint256 burnShares = _previewWithdrawIncludeRewardsDistributed(
             expectedRewards,
-            expectedRewards
+            REWARD_RATE * _jump
         );
 
         vm.prank(_depositor);
@@ -1097,7 +1103,7 @@ contract ClaimRewards is DelegateStakingTest {
         );
 
         vm.prank(_depositor);
-        vm.expectRevert(DelegateStaking.UserHasNoShares.selector);
+        vm.expectRevert(BaseStaking.UserHasNoShares.selector);
         staking.claimRewards(0);
     }
 
@@ -1541,7 +1547,7 @@ contract ViewFunctions is DelegateStakingTest {
     function testFuzz_Revertif_MaxWithdrawDepositorHasNoStakes(
         address _depositor
     ) public {
-        vm.expectRevert(DelegateStaking.UserHasNoShares.selector);
+        vm.expectRevert(BaseStaking.UserHasNoShares.selector);
         delegate.maxWithdraw(_depositor);
     }
 
@@ -1578,9 +1584,15 @@ contract ViewFunctions is DelegateStakingTest {
 
         _jumpAhead(_jump);
 
-        rewardsDistributor.collectRewardsTo(address(delegate));
+        // first 1000 shares was the dead shares so must decrease from the expected rewards
+        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
+            delegate.balanceOf(_depositor1),
+            REWARD_RATE * _jump
+        );
 
-        uint256 rewards = REWARD_RATE * _jump;
+        uint256 rewards = assetsAmount - _amount1;
+
+        rewardsDistributor.collectRewardsTo(address(delegate));
 
         uint256 maxWithdraw = delegate.maxWithdraw(_depositor1);
 

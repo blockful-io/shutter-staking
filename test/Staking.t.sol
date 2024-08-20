@@ -28,7 +28,7 @@ contract StakingTest is Test {
     uint256 constant LOCK_PERIOD = 182 days; // 6 months
     uint256 constant MIN_STAKE = 50_000e18; // 50k
     uint256 constant REWARD_RATE = 0.1e18;
-    uint256 constant INITIAL_DEPOSIT = 1000e18;
+    uint256 constant INITIAL_DEPOSIT = 10000e18;
 
     function setUp() public {
         // Set the block timestamp to an arbitrary value to avoid introducing assumptions into tests
@@ -53,9 +53,9 @@ contract StakingTest is Test {
         );
         vm.label(address(staking), "staking");
 
-        _mintGovToken(address(this), 1000e18);
+        _mintGovToken(address(this), INITIAL_DEPOSIT);
 
-        govToken.approve(address(staking), 1000e18);
+        govToken.approve(address(staking), INITIAL_DEPOSIT);
 
         staking.initialize(
             address(this), // owner
@@ -919,25 +919,32 @@ contract ClaimRewards is StakingTest {
 
         _stake(_depositor, _amount);
 
-        uint256 timestampBefore = vm.getBlockTimestamp();
+        uint256 totalSupplyBefore = staking.totalSupply();
 
         _jumpAhead(_jump);
 
-        uint256 expectedRewards = REWARD_RATE *
-            (vm.getBlockTimestamp() - timestampBefore);
+        // first 1000 shares was the dead shares so must decrease from the expected rewards
+        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
+            staking.balanceOf(_depositor),
+            REWARD_RATE * _jump
+        );
+
+        uint256 expectedRewards = assetsAmount - _amount;
 
         uint256 burnShares = _previewWithdrawIncludeRewardsDistributed(
             expectedRewards,
-            expectedRewards
+            REWARD_RATE * _jump
         );
 
         vm.prank(_depositor);
         staking.claimRewards(0);
 
+        uint256 totalSupplyAfter = staking.totalSupply();
+
         assertApproxEqAbs(
-            staking.totalSupply(),
-            _amount - burnShares,
-            1e18,
+            totalSupplyAfter,
+            totalSupplyBefore - burnShares,
+            1,
             "Wrong total supply"
         );
     }
@@ -1092,7 +1099,7 @@ contract ClaimRewards is StakingTest {
         );
 
         vm.prank(_depositor);
-        vm.expectRevert(Staking.UserHasNoShares.selector);
+        vm.expectRevert(BaseStaking.UserHasNoShares.selector);
         staking.claimRewards(0);
     }
 
@@ -1677,7 +1684,7 @@ contract ViewFunctions is StakingTest {
     function testFuzz_Revertif_MaxWithdrawDepositorHasNoStakes(
         address _depositor
     ) public {
-        vm.expectRevert(Staking.UserHasNoShares.selector);
+        vm.expectRevert(BaseStaking.UserHasNoShares.selector);
         staking.maxWithdraw(_depositor);
     }
 
@@ -1748,10 +1755,6 @@ contract ViewFunctions is StakingTest {
 
         uint256 maxWithdraw = staking.maxWithdraw(_depositor);
         assertEq(maxWithdraw, 0, "Wrong max withdraw");
-    }
-
-    function testFuzz_convertToSharesNoSupply(uint256 assets) public view {
-        assertEq(staking.convertToShares(assets), assets);
     }
 
     function testFuzz_ConvertToSharesHasSupplySameBlock(
