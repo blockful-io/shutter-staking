@@ -268,18 +268,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20 {
     }
 
     /// @notice Initialize the contract minting dead shares to avoid inflation attack
-    function __BaseStaking_init(
-        address _owner,
-        address _stakingToken,
-        address _rewardsDistributor,
-        uint256 _lockPeriod
-    ) internal {
-        nextStakeId = 1;
-
-        stakingToken = ERC20(_stakingToken);
-        rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
-        lockPeriod = _lockPeriod;
-
+    function __BaseStaking_init() internal {
         // mint dead shares to avoid inflation attack
         uint256 amount = 10_000e18;
 
@@ -291,8 +280,5 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20 {
 
         // Transfer the SHU to the vault
         stakingToken.transferFrom(msg.sender, address(this), amount);
-
-        // Transfer ownership to the DAO contract
-        _transferOwnership(_owner);
     }
 }

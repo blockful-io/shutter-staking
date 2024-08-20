@@ -3,7 +3,7 @@ pragma solidity 0.8.26;
 
 import {BaseStaking} from "./BaseStaking.sol";
 import {EnumerableSetLib} from "./libraries/EnumerableSetLib.sol";
-import {FixedPointMathLib} from "./libraries/FixedPointMathLib.sol";
+import {ERC20VotesUpgradeable as ERC20} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
 /**
@@ -125,13 +125,10 @@ contract Staking is BaseStaking {
         __ERC20_init("Staked SHU", "sSHU");
 
         minStake = _minStake;
-
-        __BaseStaking_init(
-            _owner,
-            _stakingToken,
-            _rewardsDistributor,
-            _lockPeriod
-        );
+        nextStakeId = 1;
+        stakingToken = ERC20(_stakingToken);
+        rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
+        lockPeriod = _lockPeriod;
     }
 
     /// @notice Stake SHU

@@ -1,7 +1,7 @@
 [profile.default]
   evm_version = "paris"
   optimizer = true
-  optimizer_runs = 50
+  optimizer_runs = 100
   via_ir = true
   solc_version = "0.8.26"
   verbosity = 3
