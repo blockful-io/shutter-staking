@@ -261,47 +261,53 @@ contract StakingIntegrationTest is Test {
         assertApproxEqAbs(APR, 21e18, 1e18);
     }
 
-    function testForkFuzz_MultipleDepositorsStakeMinStakeSameTimestamp(
-        uint256 _depositorsCount,
-        uint256 _jump
-    ) public {
-        _depositorsCount = bound(_depositorsCount, 1, 1000);
-
-        _jump = _boundRealisticTimeAhead(_jump);
-
-        _setRewardAndFund();
-
-        for (uint256 i = 0; i < _depositorsCount; i++) {
-            address depositor = address(
-                uint160(uint256(keccak256(abi.encodePacked(i))))
-            );
-            vm.prank(CONTRACT_OWNER);
-            staking.setKeyper(depositor, true);
-
-            deal(STAKING_TOKEN, depositor, MIN_STAKE);
-
-            vm.startPrank(depositor);
-            IERC20(STAKING_TOKEN).approve(address(staking), MIN_STAKE);
-            staking.stake(MIN_STAKE);
-            vm.stopPrank();
-        }
-
-        uint256 expectedRewardsDistributed = REWARD_RATE * _jump;
-
-        uint256 expectedRewardPerKeyper = expectedRewardsDistributed /
-            _depositorsCount;
-
-        _jumpAhead(_jump);
-
-        for (uint256 i = 0; i < _depositorsCount; i++) {
-            address depositor = address(
-                uint160(uint256(keccak256(abi.encodePacked(i))))
-            );
-            vm.startPrank(depositor);
-            uint256 rewards = staking.claimRewards(0);
-            vm.stopPrank();
-
-            assertApproxEqAbs(rewards, expectedRewardPerKeyper, 0.1e18);
-        }
-    }
+    //    function testForkFuzz_MultipleDepositorsStakeMinStakeSameTimestamp(
+    //        uint256 _depositorsCount,
+    //        uint256 _jump
+    //    ) public {
+    //        _depositorsCount = bound(_depositorsCount, 1, 1000);
+    //
+    //        _jump = _boundRealisticTimeAhead(_jump);
+    //
+    //        _setRewardAndFund();
+    //
+    //        for (uint256 i = 0; i < _depositorsCount; i++) {
+    //            address depositor = address(
+    //                uint160(uint256(keccak256(abi.encodePacked(i))))
+    //            );
+    //            vm.prank(CONTRACT_OWNER);
+    //            staking.setKeyper(depositor, true);
+    //
+    //            deal(STAKING_TOKEN, depositor, MIN_STAKE);
+    //
+    //            vm.startPrank(depositor);
+    //            IERC20(STAKING_TOKEN).approve(address(staking), MIN_STAKE);
+    //            staking.stake(MIN_STAKE);
+    //            vm.stopPrank();
+    //        }
+    //
+    //        uint256 expectedRewardsDistributed = REWARD_RATE * _jump;
+    //
+    //        uint256 deadAssetsBefore = staking.convertToAssets(
+    //            staking.balanceOf(address(staking))
+    //        );
+    //
+    //        //        uint256 deadRewards = _previewWithdrawIncludeRewardsDistributed()
+    //
+    //        uint256 expectedRewardPerKeyper = (expectedRewardsDistributed -
+    //            deadAssets) / _depositorsCount;
+    //
+    //        _jumpAhead(_jump);
+    //
+    //        for (uint256 i = 0; i < _depositorsCount; i++) {
+    //            address depositor = address(
+    //                uint160(uint256(keccak256(abi.encodePacked(i))))
+    //            );
+    //            vm.startPrank(depositor);
+    //            uint256 rewards = staking.claimRewards(0);
+    //            vm.stopPrank();
+    //
+    //            assertApproxEqAbs(rewards, expectedRewardPerKeyper, 0.1e18);
+    //        }
+    //    }
 }

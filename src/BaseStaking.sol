@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {console} from "@forge-std/console.sol";
 import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
 import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
 import {EnumerableSetLib} from "@solady/utils/EnumerableSetLib.sol";
@@ -99,21 +98,6 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
         _disableInitializers();
     }
 
-    /// TODO add natspec
-    function __init_deadShares() internal {
-        // mint dead shares to avoid inflation attack
-        uint256 amount = 10_000e18;
-
-        // Calculate the amount of shares to mint
-        uint256 shares = convertToShares(amount);
-
-        // Mint the shares to the vault
-        _mint(address(this), shares);
-
-        // Transfer the SHU to the vault
-        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
-    }
-
     /// @notice Claim rewards
     ///         - If no amount is specified, will claim all the rewards
     ///         - If the amount is specified, the amount must be less than the
@@ -127,7 +111,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /// @param amount The amount of rewards to claim
     function claimRewards(
         uint256 amount
-    ) public updateRewards returns (uint256 rewards) {
+    ) external updateRewards returns (uint256 rewards) {
         // Prevents the keyper from claiming more than they should
         rewards = _calculateWithdrawAmount(amount, maxWithdraw(msg.sender));
         require(rewards > 0, NoRewardsToClaim());
@@ -143,6 +127,10 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     function totalAssets() public view returns (uint256) {
         return stakingToken.balanceOf(address(this));
     }
+
+    /*//////////////////////////////////////////////////////////////
+                         TRANSFER FUNCTIONS
+    //////////////////////////////////////////////////////////////*/
 
     /// @notice Transfer is disabled
     function transfer(address, uint256) public pure override returns (bool) {
@@ -213,10 +201,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
     /// @notice Get the total amount of assets that a keyper can withdraw
     /// @dev must be implemented by the child contract
     function maxWithdraw(address user) public view returns (uint256 amount) {
-        uint256 shares = balanceOf(user);
-        require(shares > 0, UserHasNoShares());
-
-        uint256 assets = convertToAssets(shares);
+        uint256 assets = convertToAssets(balanceOf(user));
         uint256 locked = totalLocked[user];
 
         unchecked {
@@ -286,5 +271,20 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20VotesUpgradeable {
             require(_amount <= maxWithdrawAmount, WithdrawAmountTooHigh());
             amount = _amount;
         }
+    }
+
+    /// TODO add natspec
+    function __init_deadShares() internal {
+        // mint dead shares to avoid inflation attack
+        uint256 amount = 10_000e18;
+
+        // Calculate the amount of shares to mint
+        uint256 shares = convertToShares(amount);
+
+        // Mint the shares to the vault
+        _mint(address(this), shares);
+
+        // Transfer the SHU to the vault
+        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
     }
 }

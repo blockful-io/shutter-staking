@@ -197,6 +197,9 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
         uint256 amount
     ) public override onlyOwner {
         require(to != address(0), ZeroAddress());
-        IERC20(token).safeTransfer(to, amount);
+
+        // we don't want to use safeTransfer here as not all ERC20 tokens
+        // are compatible it
+        IERC20(token).transfer(to, amount);
     }
 }

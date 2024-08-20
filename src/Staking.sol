@@ -92,6 +92,7 @@ contract Staking is BaseStaking {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
+
     /// @notice Thrown when a non-keyper attempts a call for which only keypers are allowed
     error OnlyKeyper();
 
@@ -125,7 +126,7 @@ contract Staking is BaseStaking {
         address _rewardsDistributor,
         uint256 _lockPeriod,
         uint256 _minStake
-    ) public initializer {
+    ) external initializer {
         __ERC20_init("Staked SHU", "sSHU");
 
         // Transfer ownership to the DAO contract
@@ -152,7 +153,7 @@ contract Staking is BaseStaking {
     /// @return stakeId The index of the stake
     function stake(
         uint256 amount
-    ) public updateRewards returns (uint256 stakeId) {
+    ) external updateRewards returns (uint256 stakeId) {
         require(keypers[msg.sender], OnlyKeyper());
 
         require(amount > 0, ZeroAmount());
@@ -182,7 +183,7 @@ contract Staking is BaseStaking {
 
     /// @notice Unstake SHU
     ///          - stakeId must be a valid id beloging to the keyper
-    ///          - If address keyper is a keyper only the keyper can unstake
+    ///          - If address is a keyper only them can unstake
     ///          - if keyper address is not a keyper, anyone can unstake
     ///          - Unstake can't never result in a keyper SHU staked < minStake
     ///            if the keyper is still a keyper
@@ -190,13 +191,11 @@ contract Staking is BaseStaking {
     ///            block.timestamp must be greater than the stake timestamp +
     ///            lock period
     ///          - if the stake lock period is greater than the global lock
-    ///            period, the block.timestamp must be greater than the stake timestamp +
-    ///            lock period
+    ///            period, the block.timestamp must be greater than the stake timestamp + lock period
     ///          - if address is not a keyper, lock period is ignored
     ///          - if amount is zero, the contract will transfer the stakeId
     ///            total amount
-    ///          - if amount is specified, it must be less than the stakeId amount
-    ///          - amount must be specified in SHU, not sSHU
+    ///          - amount must be specified in assets, not shares
     /// @param keyper The keyper address
     /// @param stakeId The stake index
     /// @param _amount The amount
@@ -205,7 +204,7 @@ contract Staking is BaseStaking {
         address keyper,
         uint256 stakeId,
         uint256 _amount
-    ) public updateRewards returns (uint256 amount) {
+    ) external updateRewards returns (uint256 amount) {
         require(
             userStakes[keyper].contains(stakeId),
             StakeDoesNotBelongToUser()
@@ -238,7 +237,11 @@ contract Staking is BaseStaking {
                 );
             }
 
-            uint256 maxWithdrawAvailable = keyperStake.amount - minStake;
+            // convert to assets rounds down so sometimes keyperStake.amount
+            // will not be enough and a dust amount must be left in the stake
+            uint256 maxWithdrawAvailable = convertToAssets(balanceOf(keyper)) -
+                minStake;
+
             require(amount <= maxWithdrawAvailable, WithdrawAmountTooHigh());
         }
 
@@ -248,7 +251,7 @@ contract Staking is BaseStaking {
         }
 
         // If the stake is empty, remove it
-        if (keyperStake.amount == 0) {
+        if (stakes[stakeId].amount == 0) {
             // Remove the stake from the stakes mapping
             delete stakes[stakeId];
 
@@ -265,6 +268,7 @@ contract Staking is BaseStaking {
                          RESTRICTED FUNCTIONS
     //////////////////////////////////////////////////////////////*/
     /// @notice Set the minimum stake amount
+
     /// @param _minStake The minimum stake amount
     function setMinStake(uint256 _minStake) external onlyOwner {
         minStake = _minStake;

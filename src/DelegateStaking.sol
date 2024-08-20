@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
-import {console} from "@forge-std/console.sol";
 
 import {EnumerableSetLib} from "@solady/utils/EnumerableSetLib.sol";
 import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
@@ -127,7 +126,7 @@ contract DelegateStaking is BaseStaking {
         address _rewardsDistributor,
         address _stakingContract,
         uint256 _lockPeriod
-    ) public initializer {
+    ) external initializer {
         __ERC20_init("Delegated Staking SHU", "dSHU");
 
         // Transfer ownership to the DAO contract
@@ -153,7 +152,7 @@ contract DelegateStaking is BaseStaking {
     function stake(
         address keyper,
         uint256 amount
-    ) public updateRewards returns (uint256 stakeId) {
+    ) external updateRewards returns (uint256 stakeId) {
         require(amount > 0, ZeroAmount());
 
         require(staking.keypers(keyper), AddressIsNotAKeyper());
