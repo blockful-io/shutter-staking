@@ -5,3 +5,4 @@ address constant CONTRACT_OWNER = 0x36bD3044ab68f600f6d3e081056F34f2a58432c4; //
 uint256 constant MIN_STAKE = 50_000e18;
 uint256 constant REWARD_RATE = 0.1333333333e18;
 uint256 constant LOCK_PERIOD = 182 days;
+uint256 constant INITIAL_MINT = 10_000e18;

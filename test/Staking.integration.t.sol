@@ -25,6 +25,9 @@ contract StakingIntegrationTest is Test {
     function setUp() public {
         vm.label(STAKING_TOKEN, "SHU");
         vm.createSelectFork(vm.rpcUrl("mainnet"), 20254999);
+        (, address sender, ) = vm.readCallers();
+        console.log("sender", sender);
+        deal(STAKING_TOKEN, sender, INITIAL_MINT * 2);
 
         Deploy deployScript = new Deploy();
         (staking, rewardsDistributor, ) = deployScript.run();

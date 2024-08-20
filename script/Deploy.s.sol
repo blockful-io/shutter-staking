@@ -35,6 +35,11 @@ contract Deploy is Script {
             )
         );
 
+        IERC20Metadata(STAKING_TOKEN).approve(
+            address(stakingProxy),
+            INITIAL_MINT
+        );
+
         stakingProxy.initialize(
             CONTRACT_OWNER,
             STAKING_TOKEN,
@@ -42,8 +47,6 @@ contract Deploy is Script {
             LOCK_PERIOD,
             MIN_STAKE
         );
-
-        IERC20Metadata(STAKING_TOKEN).approve(address(stakingProxy), 1000e18);
 
         DelegateStaking delegate = new DelegateStaking();
         delegateProxy = DelegateStaking(
@@ -56,7 +59,10 @@ contract Deploy is Script {
             )
         );
 
-        IERC20Metadata(STAKING_TOKEN).approve(address(delegateProxy), 1000e18);
+        IERC20Metadata(STAKING_TOKEN).approve(
+            address(delegateProxy),
+            INITIAL_MINT
+        );
 
         delegateProxy.initialize(
             CONTRACT_OWNER,
