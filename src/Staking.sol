@@ -1,12 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {EnumerableSetLib} from "@solady/utils/EnumerableSetLib.sol";
-
 import {BaseStaking} from "./BaseStaking.sol";
-import {SafeTransferLib} from "./libraries/SafeTransferLib.sol";
+import {EnumerableSetLib} from "./libraries/EnumerableSetLib.sol";
 import {FixedPointMathLib} from "./libraries/FixedPointMathLib.sol";
-import {IERC20} from "./interfaces/IERC20.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
 /**
@@ -41,8 +38,6 @@ contract Staking is BaseStaking {
     //////////////////////////////////////////////////////////////*/
     using EnumerableSetLib for EnumerableSetLib.Uint256Set;
 
-    using SafeTransferLib for IERC20;
-
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
     //////////////////////////////////////////////////////////////*/
@@ -68,10 +63,10 @@ contract Staking is BaseStaking {
     //////////////////////////////////////////////////////////////*/
 
     /// @notice stores the metadata associated with a given stake
-    mapping(uint256 id => Stake stake) public stakes;
+    mapping(uint256 => Stake) public stakes;
 
     /// @notice keypers mapping
-    mapping(address keyper => bool isKeyper) public keypers;
+    mapping(address => bool) public keypers;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -129,17 +124,14 @@ contract Staking is BaseStaking {
     ) external initializer {
         __ERC20_init("Staked SHU", "sSHU");
 
-        // Transfer ownership to the DAO contract
-        _transferOwnership(_owner);
-
-        stakingToken = IERC20(_stakingToken);
-        rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
-        lockPeriod = _lockPeriod;
         minStake = _minStake;
 
-        nextStakeId = 1;
-
-        __init_deadShares();
+        __BaseStaking_init(
+            _owner,
+            _stakingToken,
+            _rewardsDistributor,
+            _lockPeriod
+        );
     }
 
     /// @notice Stake SHU

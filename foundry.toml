@@ -1,10 +1,11 @@
 [profile.default]
   evm_version = "paris"
   optimizer = true
-  optimizer_runs = 100
+  optimizer_runs = 50
   via_ir = true
   solc_version = "0.8.26"
   verbosity = 3
+  gas_reports = ["Staking", "DelegateStaking", "RewardsDistributor"]
 
 [profile.ci]
   fuzz = { runs = 5000 }
