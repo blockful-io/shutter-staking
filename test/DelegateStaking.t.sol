@@ -192,6 +192,13 @@ contract DelegateStakingTest is Test {
 
         return _shares.mulDivDown(assets, supply);
     }
+
+    function _maxWithdraw(address user) internal view returns (uint256) {
+        uint256 assets = delegate.convertToAssets(delegate.balanceOf(user));
+        uint256 locked = delegate.totalLocked(user);
+
+        return locked >= assets ? 0 : assets - locked;
+    }
 }
 
 contract Initializer is DelegateStakingTest {
@@ -1063,12 +1070,13 @@ contract ClaimRewards is DelegateStakingTest {
     function testFuzz_RevertIf_UserHasNoShares(address _depositor) public {
         vm.assume(
             _depositor != address(0) &&
-                _depositor != ProxyUtils.getAdminAddress(address(staking))
+                _depositor != address(delegate) &&
+                _depositor != ProxyUtils.getAdminAddress(address(delegate))
         );
 
         vm.prank(_depositor);
         vm.expectRevert(BaseStaking.NoRewardsToClaim.selector);
-        staking.claimRewards(0);
+        delegate.claimRewards(0);
     }
 
     function testFuzz_RevertIf_NoRewardsToClaimForThatUser(
@@ -1508,7 +1516,7 @@ contract ViewFunctions is DelegateStakingTest {
 
         _stake(_depositor, _keyper, _amount);
 
-        uint256 maxWithdraw = delegate.maxWithdraw(_depositor);
+        uint256 maxWithdraw = _maxWithdraw(_depositor);
         assertEq(maxWithdraw, 0, "Wrong max withdraw");
     }
 
@@ -1539,7 +1547,7 @@ contract ViewFunctions is DelegateStakingTest {
 
         rewardsDistributor.collectRewardsTo(address(delegate));
 
-        uint256 maxWithdraw = delegate.maxWithdraw(_depositor1);
+        uint256 maxWithdraw = _maxWithdraw(_depositor1);
 
         assertApproxEqAbs(maxWithdraw, rewards, 0.1e18, "Wrong max withdraw");
     }
@@ -1561,7 +1569,7 @@ contract ViewFunctions is DelegateStakingTest {
         _stake(_depositor, _keyper, _amount1);
         _stake(_depositor, _keyper, _amount2);
 
-        uint256 maxWithdraw = delegate.maxWithdraw(_depositor);
+        uint256 maxWithdraw = _maxWithdraw(_depositor);
         assertEq(maxWithdraw, 0, "Wrong max withdraw");
     }
 

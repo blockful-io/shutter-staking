@@ -176,6 +176,13 @@ contract StakingTest is Test {
 
         return _shares.mulDivDown(assets, supply);
     }
+
+    function _maxWithdraw(address user) internal view returns (uint256) {
+        uint256 assets = staking.convertToAssets(staking.balanceOf(user));
+        uint256 locked = staking.totalLocked(user);
+
+        return locked >= assets ? 0 : assets - locked;
+    }
 }
 
 contract Initializer is StakingTest {
@@ -1048,6 +1055,18 @@ contract ClaimRewards is StakingTest {
         staking.claimRewards(0);
     }
 
+    function testFuzz_RevertIf_UserHasNoShares(address _depositor) public {
+        vm.assume(
+            _depositor != address(0) &&
+                _depositor != address(staking) &&
+                _depositor != ProxyUtils.getAdminAddress(address(staking))
+        );
+
+        vm.prank(_depositor);
+        vm.expectRevert(BaseStaking.NoRewardsToClaim.selector);
+        staking.claimRewards(0);
+    }
+
     function testFuzz_RevertIf_KeyperHasNoSHares(address _depositor) public {
         vm.assume(
             _depositor != address(0) &&
@@ -1631,7 +1650,7 @@ contract ViewFunctions is StakingTest {
 
         _stake(_depositor, _amount);
 
-        uint256 maxWithdraw = staking.maxWithdraw(_depositor);
+        uint256 maxWithdraw = _maxWithdraw(_depositor);
         assertEq(maxWithdraw, 0, "Wrong max withdraw");
     }
 
@@ -1665,7 +1684,7 @@ contract ViewFunctions is StakingTest {
 
         uint256 rewards = assetsAmount - _amount1;
 
-        uint256 maxWithdraw = staking.maxWithdraw(_depositor1);
+        uint256 maxWithdraw = _maxWithdraw(_depositor1);
         assertApproxEqAbs(maxWithdraw, rewards, 0.1e18, "Wrong max withdraw");
     }
 
@@ -1685,7 +1704,7 @@ contract ViewFunctions is StakingTest {
         _stake(_depositor, _amount1);
         _stake(_depositor, _amount2);
 
-        uint256 maxWithdraw = staking.maxWithdraw(_depositor);
+        uint256 maxWithdraw = _maxWithdraw(_depositor);
         assertEq(maxWithdraw, 0, "Wrong max withdraw");
     }
 

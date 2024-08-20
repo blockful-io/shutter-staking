@@ -104,8 +104,17 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20 {
     function claimRewards(
         uint256 amount
     ) external updateRewards returns (uint256 rewards) {
+        uint256 assets = convertToAssets(balanceOf(msg.sender));
+        uint256 locked = totalLocked[msg.sender];
+
+        uint256 maxWithdrawAmount;
+        unchecked {
+            // need the first branch as convertToAssets rounds down
+            maxWithdrawAmount = locked >= assets ? 0 : assets - locked;
+        }
+
         // Prevents the keyper from claiming more than they should
-        rewards = _calculateWithdrawAmount(amount, maxWithdraw(msg.sender));
+        rewards = _calculateWithdrawAmount(amount, maxWithdrawAmount);
         require(rewards > 0, NoRewardsToClaim());
 
         // Calculates the amount of shares to burn
@@ -164,7 +173,6 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20 {
         uint256 assets
     ) public view virtual returns (uint256) {
         uint256 supply = totalSupply(); // Saves an extra SLOAD if totalSupply is non-zero.
-
         return supply == 0 ? assets : assets.mulDivDown(supply, _totalAssets());
     }
 
@@ -182,18 +190,6 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20 {
         address user
     ) external view returns (uint256[] memory) {
         return userStakes[user].values();
-    }
-
-    /// @notice Get the total amount of assets that a keyper can withdraw
-    /// @dev must be implemented by the child contract
-    function maxWithdraw(address user) public view returns (uint256 amount) {
-        uint256 assets = convertToAssets(balanceOf(user));
-        uint256 locked = totalLocked[user];
-
-        unchecked {
-            // need the first branch as convertToAssets rounds down
-            amount = locked >= assets ? 0 : assets - locked;
-        }
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -269,11 +265,8 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20 {
         // mint dead shares to avoid inflation attack
         uint256 amount = 10_000e18;
 
-        // Calculate the amount of shares to mint
-        uint256 shares = convertToShares(amount);
-
         // Mint the shares to the vault
-        _mint(address(this), shares);
+        _mint(address(this), convertToShares(amount));
 
         // Transfer the SHU to the vault
         stakingToken.transferFrom(msg.sender, address(this), amount);
