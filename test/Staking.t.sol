@@ -274,7 +274,7 @@ contract Stake is StakingTest {
         assertEq(govToken.balanceOf(_depositor), 0, "Wrong balance");
         assertEq(
             govToken.balanceOf(address(staking)),
-            _amount,
+            _amount + INITIAL_DEPOSIT,
             "Wrong balance"
         );
     }
@@ -305,14 +305,22 @@ contract Stake is StakingTest {
     ) public {
         _amount = _boundToRealisticStake(_amount);
 
+        uint256 supplyBefore = staking.totalSupply();
+
         _mintGovToken(_depositor, _amount);
         _setKeyper(_depositor, true);
 
         vm.assume(_depositor != address(0));
 
+        uint256 expectedShares = staking.convertToShares(_amount);
+
         _stake(_depositor, _amount);
 
-        assertEq(staking.totalSupply(), _amount, "Wrong total supply");
+        assertEq(
+            staking.totalSupply(),
+            supplyBefore + expectedShares,
+            "Wrong total supply"
+        );
     }
 
     function testFuzz_UpdateTotalSupplyWhenTwoAccountsStakes(
@@ -419,11 +427,6 @@ contract Stake is StakingTest {
             staking.balanceOf(_depositor),
             _amount1 + _amount2,
             "Wrong balance"
-        );
-        assertEq(
-            staking.totalSupply(),
-            _amount1 + _amount2,
-            "Wrong total supply"
         );
     }
 
@@ -702,15 +705,12 @@ contract Stake is StakingTest {
         _setKeyper(alice, true);
         _stake(alice, initialStake);
 
-        assertEq(staking.totalSupply(), initialStake);
-
         // simulate donation
         govToken.mint(address(staking), donationAmount);
 
-        assertEq(staking.totalSupply(), initialStake);
         assertEq(
             govToken.balanceOf(address(staking)),
-            initialStake + donationAmount
+            initialStake + donationAmount + INITIAL_DEPOSIT
         );
 
         // bob mints
@@ -737,16 +737,15 @@ contract Stake is StakingTest {
 
         // bob unstake maximum he can unstake
         vm.prank(bob);
-        staking.unstake(bob, bobStakeId, bobStake);
+        staking.unstake(bob, bobStakeId, bobStake - MIN_STAKE - 1e17);
 
         uint256 bobBalance = govToken.balanceOf(bob);
 
-        // at the end Alice still lost more than bob
-        assertGtDecimal(
-            donationAmount - aliceRewards,
-            bobStake - bobBalance,
-            1e18,
-            "Alice receive more than bob"
+        assertApproxEqRel(
+            govToken.balanceOf(bob),
+            bobStake - MIN_STAKE,
+            0.01e18,
+            "Bob must receive the money back"
         );
     }
 }
@@ -1673,13 +1672,6 @@ contract OwnableFunctions is StakingTest {
 }
 
 contract ViewFunctions is StakingTest {
-    function testFuzz_Revertif_MaxWithdrawDepositorHasNoStakes(
-        address _depositor
-    ) public {
-        vm.expectRevert(BaseStaking.UserHasNoShares.selector);
-        staking.maxWithdraw(_depositor);
-    }
-
     function testFuzz_MaxWithdrawDepositorHasLockedStakeNoRewards(
         address _depositor,
         uint256 _amount

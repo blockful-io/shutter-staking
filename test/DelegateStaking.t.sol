@@ -311,7 +311,7 @@ contract Stake is DelegateStakingTest {
         );
         assertEq(
             govToken.balanceOf(address(delegate)),
-            _amount,
+            _amount + INITIAL_DEPOSIT,
             "Tokens were not transferred"
         );
         vm.stopPrank();
@@ -347,6 +347,8 @@ contract Stake is DelegateStakingTest {
     ) public {
         _amount = _boundToRealisticStake(_amount);
 
+        uint256 supplyBefore = delegate.totalSupply();
+
         _mintGovToken(_depositor, _amount);
         _setKeyper(_keyper, true);
 
@@ -355,9 +357,10 @@ contract Stake is DelegateStakingTest {
                 _depositor != ProxyUtils.getAdminAddress(address(delegate))
         );
 
+        uint256 expectedShares = delegate.convertToShares(_amount);
         _stake(_depositor, _keyper, _amount);
 
-        assertEq(delegate.totalSupply(), _amount);
+        assertEq(delegate.totalSupply(), expectedShares + supplyBefore);
     }
 
     function testFuzz_UpdateTotalSupplyWhenTwoAccountsStakes(
@@ -732,12 +735,11 @@ contract Stake is DelegateStakingTest {
         vm.startPrank(bob);
         delegate.unstake(bobStakeId, bobAmount - 1e5);
 
-        // Alice earn less than bob
         assertApproxEqRel(
             govToken.balanceOf(bob),
             bobAmount,
             0.01e18,
-            "Bob must received the money back"
+            "Bob must receive the money back"
         );
     }
 
@@ -1542,13 +1544,6 @@ contract OwnableFunctions is DelegateStakingTest {
 }
 
 contract ViewFunctions is DelegateStakingTest {
-    function testFuzz_Revertif_MaxWithdrawDepositorHasNoStakes(
-        address _depositor
-    ) public {
-        vm.expectRevert(BaseStaking.UserHasNoShares.selector);
-        delegate.maxWithdraw(_depositor);
-    }
-
     function testFuzz_MaxWithdrawDepositorHasLockedStakeNoRewards(
         address _keyper,
         address _depositor,
@@ -1616,10 +1611,6 @@ contract ViewFunctions is DelegateStakingTest {
 
         uint256 maxWithdraw = delegate.maxWithdraw(_depositor);
         assertEq(maxWithdraw, 0, "Wrong max withdraw");
-    }
-
-    function testFuzz_ConvertToSharesNoSupply(uint256 assets) public view {
-        assertEq(delegate.convertToShares(assets), assets);
     }
 
     function testFuzz_ConvertToSharesHasSupplySameBlock(
