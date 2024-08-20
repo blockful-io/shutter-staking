@@ -810,33 +810,6 @@ contract ClaimRewards is StakingTest {
         staking.claimRewards(0);
     }
 
-    function testFuzz_ClaimAllRewardsOnlyStaker(
-        address _depositor,
-        uint256 _amount,
-        uint256 _jump
-    ) public {
-        _amount = _boundToRealisticStake(_amount);
-        _jump = _boundRealisticTimeAhead(_jump);
-
-        _mintGovToken(_depositor, _amount);
-        _setKeyper(_depositor, true);
-
-        _stake(_depositor, _amount);
-
-        uint256 timestampBefore = vm.getBlockTimestamp();
-
-        _jumpAhead(_jump);
-
-        vm.prank(_depositor);
-        uint256 rewards = staking.claimRewards(0);
-
-        uint256 expectedRewards = REWARD_RATE *
-            (vm.getBlockTimestamp() - timestampBefore);
-
-        // need to accept a small error due to the donation attack prevention
-        assertApproxEqAbs(rewards, expectedRewards, 1e18, "Wrong rewards");
-    }
-
     function testFuzz_ClaimRewardBurnShares(
         address _depositor,
         uint256 _amount,

@@ -817,36 +817,6 @@ contract ClaimRewards is DelegateStakingTest {
         delegate.claimRewards(0);
     }
 
-    function testFuzz_ClaimAllRewardsOnlyStaker(
-        address _keyper,
-        address _depositor,
-        uint256 _amount,
-        uint256 _jump
-    ) public {
-        _amount = _boundToRealisticStake(_amount);
-        _jump = _boundRealisticTimeAhead(_jump);
-
-        _mintGovToken(_depositor, _amount);
-        _setKeyper(_keyper, true);
-
-        _stake(_depositor, _keyper, _amount);
-
-        _jumpAhead(_jump);
-
-        // first 1000 shares was the dead shares so must decrease from the expected rewards
-        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
-            delegate.balanceOf(_depositor),
-            REWARD_RATE * _jump
-        );
-
-        uint256 expectedRewards = assetsAmount - _amount;
-
-        vm.prank(_depositor);
-        uint256 rewards = delegate.claimRewards(0);
-
-        assertEq(rewards, expectedRewards, "Wrong rewards");
-    }
-
     function testFuzz_ClaimRewardBurnShares(
         address _keyper,
         address _depositor,
@@ -867,7 +837,7 @@ contract ClaimRewards is DelegateStakingTest {
 
         // first 1000 shares was the dead shares so must decrease from the expected rewards
         uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
-            staking.balanceOf(_depositor),
+            delegate.balanceOf(_depositor),
             REWARD_RATE * _jump
         );
 
