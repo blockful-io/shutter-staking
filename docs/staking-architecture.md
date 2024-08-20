@@ -147,14 +147,6 @@ Set the new minimum amount of SHU tokens that must be staked by keypers.
 
 Get a list of stake ids belonging to a keyper.
 
-### `maxWithdraw(address keyper)`
-
-Calculates the maximum amount of assets that a keyper can withdraw, which
-represents the rewards accumulated and not claimed yet. This doesn't include
-unlocked stakes.
-
--   if the keyper sSHU balance is less or equal than the total locked amount, the function will return 0.
-
 ## Security Considerations
 
 -   The contract doesn't use the Ownable2Step pattern due to the 24KB contract

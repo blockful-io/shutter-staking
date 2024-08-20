@@ -1062,17 +1062,6 @@ contract ClaimRewards is StakingTest {
         staking.claimRewards(0);
     }
 
-    function testFuzz_RevertIf_KeyperHasNoSHares(address _depositor) public {
-        vm.assume(
-            _depositor != address(0) &&
-                _depositor != ProxyUtils.getAdminAddress(address(staking))
-        );
-
-        vm.prank(_depositor);
-        vm.expectRevert(BaseStaking.NoRewardsToClaim.selector);
-        staking.claimRewards(0);
-    }
-
     function testFuzz_RevertIf_NoRewardsToClaimToThatUser(
         address _depositor1,
         address _depositor2,
@@ -1656,6 +1645,8 @@ contract ViewFunctions is StakingTest {
         uint256 _amount2,
         uint256 _jump
     ) public {
+        vm.assume(_depositor1 != _depositor2);
+
         _amount1 = _boundToRealisticStake(_amount1);
         _amount2 = _boundToRealisticStake(_amount2);
 

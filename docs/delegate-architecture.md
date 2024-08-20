@@ -108,7 +108,7 @@ Set the new staking contract address.
 
 Get a list of stake ids belonging to a user.
 
-### `maxWithdraw(address user)`
+## Security Considerations
 
-Calculates the maximum amount of assets that a keyper can withdraw, which
-represents the rewards accumulated and not claimed yet. This funciton will revert if the user has no shares.
+-   The contract doesn't use the Ownable2Step pattern due to the 24KB contract
+    size limit.
