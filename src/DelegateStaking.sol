@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
-import {EnumerableSetLib} from "@solady/utils/EnumerableSetLib.sol";
-import {OwnableUpgradeable} from "@openzeppelin-upgradeable/contracts/access/OwnableUpgradeable.sol";
-import {ERC20VotesUpgradeable} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
+import {ERC20VotesUpgradeable as ERC20Votes} from "@openzeppelin-upgradeable/contracts/token/ERC20/extensions/ERC20VotesUpgradeable.sol";
 
 import {BaseStaking} from "./BaseStaking.sol";
-import {IERC20} from "./interfaces/IERC20.sol";
-import {SafeTransferLib} from "./libraries/SafeTransferLib.sol";
-import {FixedPointMathLib} from "./libraries/FixedPointMathLib.sol";
+import {EnumerableSetLib} from "./libraries/EnumerableSetLib.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
 
 interface IStaking {
@@ -38,11 +34,9 @@ interface IStaking {
  */
 contract DelegateStaking is BaseStaking {
     /*//////////////////////////////////////////////////////////////
-                               LIBRARIES
+                                 LIBRARIES
     //////////////////////////////////////////////////////////////*/
     using EnumerableSetLib for EnumerableSetLib.Uint256Set;
-
-    using SafeTransferLib for IERC20;
 
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
@@ -66,14 +60,14 @@ contract DelegateStaking is BaseStaking {
     }
 
     /*//////////////////////////////////////////////////////////////
-                                MAPPINGS
+                                 MAPPINGS
     //////////////////////////////////////////////////////////////*/
 
     /// @notice stores the metadata associated with a given stake
-    mapping(uint256 id => Stake _stake) public stakes;
+    mapping(uint256 => Stake) public stakes;
 
     /// @notice stores the amount delegated to a keyper
-    mapping(address keyper => uint256 totalDelegated) public totalDelegated;
+    mapping(address => uint256) public totalDelegated;
 
     /*//////////////////////////////////////////////////////////////
                                  EVENTS
@@ -96,9 +90,6 @@ contract DelegateStaking is BaseStaking {
     /*//////////////////////////////////////////////////////////////
                                  ERRORS
     //////////////////////////////////////////////////////////////*/
-
-    /// @notice Thrown when a user has no shares
-    error UserHasNoShares();
 
     /// @notice Trown when amount is zero
     error ZeroAmount();
@@ -129,18 +120,18 @@ contract DelegateStaking is BaseStaking {
         address _rewardsDistributor,
         address _stakingContract,
         uint256 _lockPeriod
-    ) public initializer {
+    ) external initializer {
         __ERC20_init("Delegated Staking SHU", "dSHU");
 
-        // Transfer ownership to the DAO contract
-        _transferOwnership(_owner);
-
-        stakingToken = IERC20(_stakingToken);
-        rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
         staking = IStaking(_stakingContract);
+        stakingToken = ERC20Votes(_stakingToken);
+        rewardsDistributor = IRewardsDistributor(_rewardsDistributor);
         lockPeriod = _lockPeriod;
 
         nextStakeId = 1;
+        _transferOwnership(_owner);
+
+        __BaseStaking_init();
     }
 
     /// @notice Stake SHU
@@ -158,12 +149,10 @@ contract DelegateStaking is BaseStaking {
 
         require(staking.keypers(keyper), AddressIsNotAKeyper());
 
-        address user = msg.sender;
-
         stakeId = nextStakeId++;
 
         // Add the stake id to the user stakes
-        userStakes[user].add(stakeId);
+        userStakes[msg.sender].add(stakeId);
 
         // Add the stake to the stakes mapping
         stakes[stakeId].keyper = keyper;
@@ -172,11 +161,13 @@ contract DelegateStaking is BaseStaking {
         stakes[stakeId].lockPeriod = lockPeriod;
 
         // Increase the keyper total delegated amount
-        totalDelegated[keyper] += amount;
+        unchecked {
+            totalDelegated[keyper] += amount;
+        }
 
-        _deposit(user, amount);
+        _deposit(amount);
 
-        emit Staked(user, keyper, amount, lockPeriod);
+        emit Staked(msg.sender, keyper, amount, lockPeriod);
     }
 
     /// @notice Unstake SHU
@@ -198,8 +189,10 @@ contract DelegateStaking is BaseStaking {
         uint256 stakeId,
         uint256 _amount
     ) external updateRewards returns (uint256 amount) {
-        address user = msg.sender;
-        require(userStakes[user].contains(stakeId), StakeDoesNotBelongToUser());
+        require(
+            userStakes[msg.sender].contains(stakeId),
+            StakeDoesNotBelongToUser()
+        );
         Stake memory userStake = stakes[stakeId];
 
         require(userStake.amount > 0, StakeDoesNotExist());
@@ -214,16 +207,18 @@ contract DelegateStaking is BaseStaking {
             ? lockPeriod
             : userStake.lockPeriod;
 
-        require(
-            block.timestamp > userStake.timestamp + lock,
-            StakeIsStillLocked()
-        );
+        unchecked {
+            require(
+                block.timestamp > userStake.timestamp + lock,
+                StakeIsStillLocked()
+            );
 
-        // Decrease the amount from the stake
-        stakes[stakeId].amount -= amount;
+            // Decrease the amount from the stake
+            stakes[stakeId].amount -= amount;
 
-        // Decrease the total delegated amount
-        totalDelegated[userStake.keyper] -= amount;
+            // Decrease the total delegated amount
+            totalDelegated[userStake.keyper] -= amount;
+        }
 
         // If the stake is empty, remove it
         if (stakes[stakeId].amount == 0) {
@@ -231,12 +226,12 @@ contract DelegateStaking is BaseStaking {
             delete stakes[stakeId];
 
             // Remove the stake from the user stakes
-            userStakes[user].remove(stakeId);
+            userStakes[msg.sender].remove(stakeId);
         }
 
-        uint256 shares = _withdraw(user, amount);
+        uint256 shares = _withdraw(msg.sender, amount);
 
-        emit Unstaked(user, amount, shares);
+        emit Unstaked(msg.sender, amount, shares);
     }
 
     /*//////////////////////////////////////////////////////////////
@@ -254,28 +249,5 @@ contract DelegateStaking is BaseStaking {
         staking = IStaking(_stakingContract);
 
         emit NewStakingContract(_stakingContract);
-    }
-
-    /*//////////////////////////////////////////////////////////////
-                                OVERRIDE
-    //////////////////////////////////////////////////////////////*/
-
-    /// @notice Get the maximum amount of assets that a keyper can withdraw
-    ////         - if the user has no shares, the function will revert
-    ///          - if the user dSHU balance is less or equal than the total
-    ///            locked amount, the function will return 0
-    /// @param user The user address
-    /// @return amount The maximum amount of assets that a user can withdraw
-    function maxWithdraw(
-        address user
-    ) public view override returns (uint256 amount) {
-        uint256 shares = balanceOf(user);
-        require(shares > 0, UserHasNoShares());
-
-        uint256 assets = convertToAssets(shares);
-        uint256 locked = totalLocked[user];
-
-        // need the first branch as convertToAssets rounds down
-        amount = locked >= assets ? 0 : assets - locked;
     }
 }

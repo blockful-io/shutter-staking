@@ -6,7 +6,7 @@ interface IRewardsDistributor {
 
     function collectRewardsTo(address receiver) external returns (uint256);
 
-    function withdrawFunds(address to, uint256 amount) external;
+    function withdrawFunds(address token, address to, uint256 amount) external;
 
     function setRewardConfiguration(
         address receiver,

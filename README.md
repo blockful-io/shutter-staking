@@ -58,7 +58,7 @@ The architecture consists of two contracts:
    through the Staking contract, keypers trust that the DAO will not set the
    minimum stake amount to an unreasonable value.
 
-## Protocol Invariants [TBD]
+## Protocol Invariants
 
 1. On unstake, `keyperStake.timestamp + lockPeriod <= block.timestamp` if global `lockPeriod` is greater or equal to the stake lock period, otherwise `keyperStake.timestamp + keyperStake.lockPeriod <= block.timestamp`.
 2. If `some(keyperStakes(keyper).length()) > 0` then `nextStakeId` != 0;

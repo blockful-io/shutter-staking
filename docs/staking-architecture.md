@@ -10,7 +10,6 @@
     the other inherited functions follow the OpenZeppelin implementation.
 -   To avoid rounding errors, the contract uses the FixedPointMathLib from Solmate
     library.
--   The contract uses SafeTransferLib from solmate to interact with the SHU token.
 -   The choosen mechanism for the rewards distribution is a ERC4626 vault implementation.
 
 ## Variables
@@ -147,18 +146,11 @@ Set the new minimum amount of SHU tokens that must be staked by keypers.
 
 Get a list of stake ids belonging to a keyper.
 
-### `maxWithdraw(address keyper)`
-
-Calculates the maximum amount of assets that a keyper can withdraw, which
-represents the rewards accumulated and not claimed yet. This doesn't include
-unlocked stakes.
-
--   if the keyper has no shares, the function will revert.
--   if the keyper sSHU balance is less or equal than the minimum stake or the total locked amount, the function will return 0.
-
 ## Security Considerations
 
 -   The contract doesn't use the Ownable2Step pattern due to the 24KB contract
     size limit.
 -   If the Owner address gets compromised, the attacker can increase the minimum
     stake to a very high value, preventing keypers from unstaking their SHU tokens.
+-   The contract doesn't use safe transfer as the only token that can be
+    transferred is the SHU token, which is a trusted token.

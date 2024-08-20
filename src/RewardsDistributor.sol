@@ -3,15 +3,14 @@ pragma solidity 0.8.26;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IRewardsDistributor} from "./interfaces/IRewardsDistributor.sol";
-import {SafeTransferLib} from "./libraries/SafeTransferLib.sol";
 import {IERC20} from "./interfaces/IERC20.sol";
 
+/**
+ * @title Shutter Rewards Distributor Contract
+ *
+ * This contract lets the owner distribute rewards to the Staking and DelegateStaking contracts.
+ */
 contract RewardsDistributor is Ownable, IRewardsDistributor {
-    /*//////////////////////////////////////////////////////////////
-                                 LIBRARIES
-    //////////////////////////////////////////////////////////////*/
-    using SafeTransferLib for IERC20;
-
     /*//////////////////////////////////////////////////////////////
                                  VARIABLES
     //////////////////////////////////////////////////////////////*/
@@ -30,7 +29,7 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
     }
 
     /*//////////////////////////////////////////////////////////////
-                                MAPPINGS
+                                 MAPPINGS
     //////////////////////////////////////////////////////////////*/
 
     mapping(address receiver => RewardConfiguration configuration)
@@ -76,22 +75,18 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
     /// @notice Distribute rewards to receiver
     /// Caller must be the receiver
     function collectRewards() external override returns (uint256 rewards) {
-        address receiver = msg.sender;
-
         RewardConfiguration storage rewardConfiguration = rewardConfigurations[
-            receiver
+            msg.sender
         ];
 
         // difference in time since last update
         uint256 timeDelta = block.timestamp - rewardConfiguration.lastUpdate;
 
-        uint256 funds = rewardToken.balanceOf(address(this));
-
         rewards = rewardConfiguration.emissionRate * timeDelta;
 
         // the contract must have enough funds to distribute
         // we don't want to revert in case its zero to not block the staking contract
-        if (rewards == 0 || funds < rewards) {
+        if (rewards == 0 || rewardToken.balanceOf(address(this)) < rewards) {
             return 0;
         }
 
@@ -99,16 +94,16 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
         rewardConfiguration.lastUpdate = block.timestamp;
 
         // transfer the reward
-        rewardToken.safeTransfer(receiver, rewards);
+        rewardToken.transfer(msg.sender, rewards);
 
-        emit RewardCollected(receiver, rewards);
+        emit RewardCollected(msg.sender, rewards);
     }
 
     /// @notice Send rewards to receiver
     /// @param receiver The receiver of the rewards
     function collectRewardsTo(
         address receiver
-    ) external override returns (uint256 rewards) {
+    ) public override returns (uint256 rewards) {
         RewardConfiguration storage rewardConfiguration = rewardConfigurations[
             receiver
         ];
@@ -120,18 +115,20 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
 
         require(timeDelta > 0, TimeDeltaZero());
 
-        uint256 funds = rewardToken.balanceOf(address(this));
-
         rewards = rewardConfiguration.emissionRate * timeDelta;
 
         // the contract must have enough funds to distribute
-        require(funds >= rewards, NotEnoughFunds());
+        // and the rewards must be greater than zero
+        require(
+            rewards > 0 && rewardToken.balanceOf(address(this)) >= rewards,
+            NotEnoughFunds()
+        );
 
         // update the last update timestamp
         rewardConfiguration.lastUpdate = block.timestamp;
 
         // transfer the reward
-        rewardToken.safeTransfer(receiver, rewards);
+        rewardToken.transfer(receiver, rewards);
 
         emit RewardCollected(receiver, rewards);
     }
@@ -151,7 +148,11 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
         // only update last update if it's the first time
         if (rewardConfigurations[receiver].lastUpdate == 0) {
             rewardConfigurations[receiver].lastUpdate = block.timestamp;
+        } else {
+            // claim the rewards before updating the emission rate
+            collectRewardsTo(receiver);
         }
+
         rewardConfigurations[receiver].emissionRate = emissionRate;
 
         emit RewardConfigurationSet(receiver, emissionRate);
@@ -159,33 +160,45 @@ contract RewardsDistributor is Ownable, IRewardsDistributor {
 
     /// @notice Remove a reward configuration
     /// @param receiver The receiver of the rewards
-    function removeRewardConfiguration(address receiver) external onlyOwner {
-        delete rewardConfigurations[receiver];
+    function removeRewardConfiguration(
+        address receiver
+    ) external override onlyOwner {
+        rewardConfigurations[receiver].lastUpdate = 0;
+        rewardConfigurations[receiver].emissionRate = 0;
 
         emit RewardConfigurationSet(receiver, 0);
+    }
+
+    /// @notice Set the reward token
+    /// @param _rewardToken The reward token
+    function setRewardToken(address _rewardToken) external override onlyOwner {
+        require(_rewardToken != address(0), ZeroAddress());
+
+        // withdraw remaining old reward token
+        withdrawFunds(
+            address(rewardToken),
+            msg.sender,
+            rewardToken.balanceOf(address(this))
+        );
+
+        // set the new reward token
+        rewardToken = IERC20(_rewardToken);
+
+        emit RewardTokenSet(_rewardToken);
     }
 
     /// @notice Withdraw funds from the contract
     /// @param to The address to withdraw to
     /// @param amount The amount to withdraw
     function withdrawFunds(
+        address token,
         address to,
         uint256 amount
     ) public override onlyOwner {
-        rewardToken.safeTransfer(to, amount);
-    }
+        require(to != address(0), ZeroAddress());
 
-    /// @notice Set the reward token
-    /// @param _rewardToken The reward token
-    function setRewardToken(address _rewardToken) external onlyOwner {
-        require(_rewardToken != address(0), ZeroAddress());
-
-        // withdraw remaining old reward token
-        withdrawFunds(msg.sender, rewardToken.balanceOf(address(this)));
-
-        // set the new reward token
-        rewardToken = IERC20(_rewardToken);
-
-        emit RewardTokenSet(_rewardToken);
+        // we don't want to use safeTransfer here as not all ERC20 tokens
+        // are compatible it
+        IERC20(token).transfer(to, amount);
     }
 }

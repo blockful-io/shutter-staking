@@ -17,7 +17,7 @@ contract DelegateStakingHarness is DelegateStaking {
     function exposed_calculateWithdrawAmount(
         uint256 _amount,
         uint256 _maxWithdrawAmount
-    ) external view returns (uint256) {
+    ) external pure returns (uint256) {
         return _calculateWithdrawAmount(_amount, _maxWithdrawAmount);
     }
 }

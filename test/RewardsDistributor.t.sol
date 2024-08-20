@@ -103,7 +103,7 @@ contract OwnableFunctions is RewardsDistributorTest {
         assertEq(lastUpdate, vm.getBlockTimestamp());
     }
 
-    function testFuzz_DoNotSetLastUpdateIfIsNotTheFirstTime(
+    function testFuzz_TransferTokensIfIsAnUpdate(
         address _receiver,
         uint256 _emissionRate
     ) public {
@@ -116,14 +116,20 @@ contract OwnableFunctions is RewardsDistributorTest {
             _receiver
         );
 
+        uint256 balanceBefore = govToken.balanceOf(_receiver);
+
+        govToken.mint(address(rewardsDistributor), _emissionRate);
+
         vm.warp(vm.getBlockTimestamp() + 1);
         rewardsDistributor.setRewardConfiguration(_receiver, _emissionRate);
+
+        assertEq(govToken.balanceOf(_receiver), balanceBefore + _emissionRate);
 
         (, uint256 lastUpdateAfter) = rewardsDistributor.rewardConfigurations(
             _receiver
         );
 
-        assertEq(lastUpdateBefore, lastUpdateAfter);
+        assertEq(lastUpdateBefore + 1, lastUpdateAfter);
     }
 
     function testFuzz_RevertIf_SetRewardConfigurationZeroAddress(
@@ -224,7 +230,11 @@ contract OwnableFunctions is RewardsDistributorTest {
 
         uint256 balanceBefore = govToken.balanceOf(_to);
 
-        rewardsDistributor.withdrawFunds(_to, _amount);
+        rewardsDistributor.withdrawFunds(
+            address(rewardsDistributor.rewardToken()),
+            _to,
+            _amount
+        );
 
         assertEq(govToken.balanceOf(_to), balanceBefore + _amount);
     }
@@ -236,14 +246,18 @@ contract OwnableFunctions is RewardsDistributorTest {
     ) public {
         vm.assume(_anyone != address(this));
 
+        govToken.mint(address(rewardsDistributor), _amount);
+
+        address token = address(rewardsDistributor.rewardToken());
         vm.expectRevert(
             abi.encodeWithSelector(
                 Ownable.OwnableUnauthorizedAccount.selector,
                 _anyone
             )
         );
+
         vm.prank(_anyone);
-        rewardsDistributor.withdrawFunds(_to, _amount);
+        rewardsDistributor.withdrawFunds(token, _to, _amount);
     }
 }
 
