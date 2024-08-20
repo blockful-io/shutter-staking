@@ -324,18 +324,23 @@ contract Stake is StakingTest {
         _amount1 = _boundToRealisticStake(_amount1);
         _amount2 = _boundToRealisticStake(_amount2);
 
+        uint256 supplyBefore = staking.totalSupply();
+
         _mintGovToken(_depositor1, _amount1);
         _mintGovToken(_depositor2, _amount2);
 
         _setKeyper(_depositor1, true);
         _setKeyper(_depositor2, true);
 
+        uint256 expectedSharesDepositor1 = staking.convertToShares(_amount1);
         _stake(_depositor1, _amount1);
+
+        uint256 expectedSharesDepositor2 = staking.convertToShares(_amount2);
         _stake(_depositor2, _amount2);
 
         assertEq(
             staking.totalSupply(),
-            _amount1 + _amount2,
+            supplyBefore + expectedSharesDepositor1 + expectedSharesDepositor2,
             "Wrong total supply"
         );
     }
@@ -1192,7 +1197,7 @@ contract Unstake is StakingTest {
 
         assertEq(
             govToken.balanceOf(address(staking)),
-            expectedRewards + MIN_STAKE,
+            expectedRewards + MIN_STAKE + INITIAL_DEPOSIT,
             "Wrong balance"
         );
     }
@@ -1256,7 +1261,7 @@ contract Unstake is StakingTest {
         uint256 _amount,
         uint256 _jump
     ) public {
-        _amount = _boundToRealisticStake(_amount);
+        _amount = bound(_amount, MIN_STAKE + 1, 5_000_000e18);
         _jump = _boundUnlockedTime(_jump);
 
         _mintGovToken(_depositor, _amount + MIN_STAKE);
@@ -1268,16 +1273,8 @@ contract Unstake is StakingTest {
 
         _jumpAhead(_jump);
 
-        // first 1000 shares was the dead shares so must decrease from the expected rewards
-        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
-            staking.balanceOf(_depositor),
-            REWARD_RATE * _jump
-        );
-
-        uint256 expectedRewards = assetsAmount - _amount;
-
         uint256 sharesToBurn = _previewWithdrawIncludeRewardsDistributed(
-            expectedRewards,
+            _amount - MIN_STAKE,
             REWARD_RATE * _jump
         );
 
@@ -1288,10 +1285,6 @@ contract Unstake is StakingTest {
             staking.totalSupply(),
             totalSupplyBefore - sharesToBurn,
             "Wrong total supply"
-        );
-
-        uint256 expectedSharesRemaining = staking.convertToShares(
-            MIN_STAKE + expectedRewards
         );
     }
 

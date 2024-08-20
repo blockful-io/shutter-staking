@@ -370,17 +370,23 @@ contract Stake is DelegateStakingTest {
         _amount1 = _boundToRealisticStake(_amount1);
         _amount2 = _boundToRealisticStake(_amount2);
 
+        uint256 supplyBefore = delegate.totalSupply();
+
         _mintGovToken(_depositor1, _amount1);
         _mintGovToken(_depositor2, _amount2);
 
         _setKeyper(_keyper, true);
 
+        uint256 expectedSharesDepositor1 = staking.convertToShares(_amount1);
         _stake(_depositor1, _keyper, _amount1);
+
+        uint256 expectedSharesDepositor2 = staking.convertToShares(_amount2);
+
         _stake(_depositor2, _keyper, _amount2);
 
         assertEq(
             delegate.totalSupply(),
-            _amount1 + _amount2,
+            supplyBefore + expectedSharesDepositor1 + expectedSharesDepositor2,
             "Wrong total supply"
         );
     }
@@ -1179,21 +1185,13 @@ contract Unstake is DelegateStakingTest {
 
         _jumpAhead(_jump);
 
-        // first 1000 shares was the dead shares so must decrease from the expected rewards
-        uint256 assetsAmount = _convertToAssetsIncludeRewardsDistributed(
-            delegate.balanceOf(_depositor),
-            REWARD_RATE * _jump
-        );
-
-        uint256 expectedRewards = assetsAmount - _amount;
-
         uint256 burnShares = _previewWithdrawIncludeRewardsDistributed(
-            expectedRewards,
+            _amount,
             REWARD_RATE * _jump
         );
 
         vm.prank(_depositor);
-        delegate.unstake(stakeId, expectedRewards - 1);
+        delegate.unstake(stakeId, 0);
 
         assertEq(
             delegate.totalSupply(),
@@ -1225,7 +1223,7 @@ contract Unstake is DelegateStakingTest {
 
         assertEq(
             govToken.balanceOf(address(delegate)),
-            expectedRewards,
+            expectedRewards + INITIAL_DEPOSIT,
             "Wrong balance"
         );
         assertEq(
