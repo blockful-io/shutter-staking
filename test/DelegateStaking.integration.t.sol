@@ -7,6 +7,7 @@ import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {DelegateStaking} from "src/DelegateStaking.sol";
 import {Staking} from "src/Staking.sol";
 import {RewardsDistributor} from "src/RewardsDistributor.sol";
 import {IRewardsDistributor} from "src/interfaces/IRewardsDistributor.sol";
@@ -16,7 +17,8 @@ import {Staking} from "src/Staking.sol";
 import {Deploy} from "script/Deploy.s.sol";
 import "script/Constants.sol";
 
-contract StakingIntegrationTest is Test {
+contract DelegateStakingIntegrationTest is Test {
+    DelegateStaking delegate;
     Staking staking;
     RewardsDistributor rewardsDistributor;
 
@@ -30,7 +32,7 @@ contract StakingIntegrationTest is Test {
         deal(STAKING_TOKEN, sender, INITIAL_MINT * 2);
 
         Deploy deployScript = new Deploy();
-        (staking, rewardsDistributor, ) = deployScript.run();
+        (staking, rewardsDistributor, delegate) = deployScript.run();
     }
 
     function _boundRealisticTimeAhead(
@@ -46,7 +48,7 @@ contract StakingIntegrationTest is Test {
     function _setRewardAndFund() public {
         vm.prank(CONTRACT_OWNER);
         rewardsDistributor.setRewardConfiguration(
-            address(staking),
+            address(delegate),
             REWARD_RATE
         );
 
@@ -62,7 +64,6 @@ contract StakingIntegrationTest is Test {
         uint256 _staked,
         uint256 _days
     ) internal pure returns (uint256) {
-        // using scalar math
         uint256 SCALAR = 1e18;
 
         uint256 aprScalar = ((_rewardsReceived * SCALAR) * 365 days * 100) /
@@ -72,14 +73,14 @@ contract StakingIntegrationTest is Test {
     }
 
     function testFork_DeployStakingContracts() public view {
-        assertEq(staking.owner(), CONTRACT_OWNER);
-        assertEq(address(staking.stakingToken()), STAKING_TOKEN);
+        assertEq(delegate.owner(), CONTRACT_OWNER);
+        assertEq(address(delegate.stakingToken()), STAKING_TOKEN);
         assertEq(
-            address(staking.rewardsDistributor()),
+            address(delegate.rewardsDistributor()),
             address(rewardsDistributor)
         );
-        assertEq(staking.lockPeriod(), LOCK_PERIOD);
-        assertEq(staking.minStake(), MIN_STAKE);
+        assertEq(delegate.lockPeriod(), LOCK_PERIOD);
+        assertEq(address(delegate.staking()), address(staking));
 
         assertEq(rewardsDistributor.owner(), CONTRACT_OWNER);
         assertEq(address(rewardsDistributor.rewardToken()), STAKING_TOKEN);
@@ -109,14 +110,14 @@ contract StakingIntegrationTest is Test {
         vm.prank(CONTRACT_OWNER);
         staking.setKeyper(address(this), true);
 
-        IERC20(STAKING_TOKEN).approve(address(staking), staked);
-        staking.stake(staked);
+        IERC20(STAKING_TOKEN).approve(address(delegate), staked);
+        delegate.stake(address(this), staked);
 
         uint256 jump = 86 days;
 
         _jumpAhead(jump);
 
-        uint256 rewardsReceived = staking.claimRewards(0);
+        uint256 rewardsReceived = delegate.claimRewards(0);
 
         uint256 APR = _calculateReturnOverPrincipal(
             rewardsReceived,
@@ -128,32 +129,36 @@ contract StakingIntegrationTest is Test {
         assertApproxEqAbs(APR, 21e18, 1e18);
     }
 
-    function testForkFuzz_MultipleDepositorsStakeMinAmountDifferentTimestamp(
-        uint256 _jump
+    function testForkFuzz_MultipleDepositorsStakAmountDifferentTimestamp(
+        uint256 _jump,
+        uint256 _amount,
+        uint256 _depositorsCount
     ) public {
-        uint256 depositorsCount = 400;
+        _amount = bound(_amount, 1e18, 10000000e18);
+        _depositorsCount = bound(_depositorsCount, 2, 1000);
 
         _setRewardAndFund();
 
         _jump = bound(_jump, 1 minutes, 12 hours);
 
-        uint256[] memory timeStaked = new uint256[](depositorsCount);
+        uint256[] memory timeStaked = new uint256[](_depositorsCount);
         uint256 previousDepositorShares;
 
-        for (uint256 i = 1; i <= depositorsCount; i++) {
+        address keyper = address(1);
+        vm.prank(CONTRACT_OWNER);
+        staking.setKeyper(keyper, true);
+
+        for (uint256 i = 1; i <= _depositorsCount; i++) {
             address participant = address(uint160(i));
 
-            deal(STAKING_TOKEN, participant, MIN_STAKE);
-
-            vm.prank(CONTRACT_OWNER);
-            staking.setKeyper(participant, true);
+            deal(STAKING_TOKEN, participant, _amount);
 
             vm.startPrank(participant);
-            IERC20(STAKING_TOKEN).approve(address(staking), MIN_STAKE);
-            staking.stake(MIN_STAKE);
+            IERC20(STAKING_TOKEN).approve(address(delegate), _amount);
+            delegate.stake(keyper, _amount);
             vm.stopPrank();
 
-            uint256 shares = staking.balanceOf(participant);
+            uint256 shares = delegate.balanceOf(participant);
             if (i > 1) {
                 assertGt(previousDepositorShares, shares);
             }
@@ -166,7 +171,7 @@ contract StakingIntegrationTest is Test {
 
         uint256 previousRewardsReceived;
 
-        for (uint256 i = 1; i <= depositorsCount; i++) {
+        for (uint256 i = 1; i <= _depositorsCount; i++) {
             address participant = address(uint160(i));
 
             uint256 expectedTimestamp = timeStaked[i - 1] + 365 days;
@@ -174,7 +179,7 @@ contract StakingIntegrationTest is Test {
             _jumpAhead(expectedTimestamp - vm.getBlockTimestamp());
 
             vm.startPrank(participant);
-            uint256 rewardsReceived = staking.claimRewards(0);
+            uint256 rewardsReceived = delegate.claimRewards(0);
 
             vm.stopPrank();
 
@@ -182,10 +187,10 @@ contract StakingIntegrationTest is Test {
                 assertGt(rewardsReceived, previousRewardsReceived);
             }
 
-            uint256 assetsAfter = staking.convertToAssets(
-                staking.balanceOf(participant)
+            uint256 assetsAfter = delegate.convertToAssets(
+                delegate.balanceOf(participant)
             );
-            assertApproxEqAbs(assetsAfter, MIN_STAKE, 1e18);
+            assertApproxEqAbs(assetsAfter, _amount, 1e18);
         }
     }
 
@@ -199,17 +204,14 @@ contract StakingIntegrationTest is Test {
         vm.prank(CONTRACT_OWNER);
         staking.setKeyper(address(this), true);
 
-        IERC20(STAKING_TOKEN).approve(address(staking), staked);
-        staking.stake(staked);
+        IERC20(STAKING_TOKEN).approve(address(delegate), staked);
+        delegate.stake(address(this), staked);
 
         uint256 jump = 86 days;
 
         _jumpAhead(jump);
 
-        vm.prank(CONTRACT_OWNER);
-        staking.setKeyper(address(1), true);
-
-        uint256 rewardsReceived = staking.claimRewards(0);
+        uint256 rewardsReceived = delegate.claimRewards(0);
 
         uint256 APR = _calculateReturnOverPrincipal(
             rewardsReceived,
@@ -231,8 +233,8 @@ contract StakingIntegrationTest is Test {
         vm.prank(CONTRACT_OWNER);
         staking.setKeyper(address(this), true);
 
-        IERC20(STAKING_TOKEN).approve(address(staking), staked);
-        staking.stake(staked);
+        IERC20(STAKING_TOKEN).approve(address(delegate), staked);
+        delegate.stake(address(this), staked);
 
         uint256 previousTimestamp = vm.getBlockTimestamp();
 
@@ -240,16 +242,16 @@ contract StakingIntegrationTest is Test {
             _jumpAhead(1 hours);
 
             previousTimestamp = vm.getBlockTimestamp();
-            uint256 rewardsReceived = staking.claimRewards(0);
+            uint256 rewardsReceived = delegate.claimRewards(0);
 
-            IERC20(STAKING_TOKEN).approve(address(staking), rewardsReceived);
-            staking.stake(rewardsReceived);
+            IERC20(STAKING_TOKEN).approve(address(delegate), rewardsReceived);
+            delegate.stake(address(this), rewardsReceived);
         }
 
         _jumpAhead(1 hours);
 
-        uint256 assets = staking.convertToAssets(
-            staking.balanceOf(address(this))
+        uint256 assets = delegate.convertToAssets(
+            delegate.balanceOf(address(this))
         );
 
         uint256 APR = _calculateReturnOverPrincipal(
@@ -261,28 +263,33 @@ contract StakingIntegrationTest is Test {
         assertApproxEqAbs(APR, 21e18, 1e18);
     }
 
-    function testForkFuzz_MultipleDepositorsStakeMinStakeSameTimestamp(
+    function testForkFuzz_MultipleDepositorsStakeSameStakeSameTimestamp(
         uint256 _depositorsCount,
-        uint256 _jump
+        uint256 _jump,
+        uint256 _amount
     ) public {
+        _amount = bound(_amount, 1e18, 10000000e18);
         _depositorsCount = bound(_depositorsCount, 1, 1000);
 
         _jump = _boundRealisticTimeAhead(_jump);
 
         _setRewardAndFund();
 
+        address keyper = address(1);
+
+        vm.prank(CONTRACT_OWNER);
+        staking.setKeyper(keyper, true);
+
         for (uint256 i = 0; i < _depositorsCount; i++) {
             address depositor = address(
                 uint160(uint256(keccak256(abi.encodePacked(i))))
             );
-            vm.prank(CONTRACT_OWNER);
-            staking.setKeyper(depositor, true);
 
-            deal(STAKING_TOKEN, depositor, MIN_STAKE);
+            deal(STAKING_TOKEN, depositor, _amount);
 
             vm.startPrank(depositor);
-            IERC20(STAKING_TOKEN).approve(address(staking), MIN_STAKE);
-            staking.stake(MIN_STAKE);
+            IERC20(STAKING_TOKEN).approve(address(delegate), _amount);
+            delegate.stake(keyper, _amount);
             vm.stopPrank();
         }
 
@@ -295,7 +302,7 @@ contract StakingIntegrationTest is Test {
                 uint160(uint256(keccak256(abi.encodePacked(i))))
             );
             vm.startPrank(depositor);
-            uint256 rewards = staking.claimRewards(0);
+            uint256 rewards = delegate.claimRewards(0);
             vm.stopPrank();
 
             if (i > 0) {
