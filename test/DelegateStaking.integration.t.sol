@@ -3,6 +3,7 @@ pragma solidity 0.8.26;
 
 import "@forge-std/Test.sol";
 
+import {console} from "@forge-std/console.sol";
 import {FixedPointMathLib} from "@solmate/utils/FixedPointMathLib.sol";
 import {TransparentUpgradeableProxy, ITransparentUpgradeableProxy} from "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -175,8 +176,10 @@ contract DelegateStakingIntegrationTest is Test {
             address participant = address(uint160(i));
 
             uint256 expectedTimestamp = timeStaked[i - 1] + 365 days;
-            // jump the diferrence between expected and actual time
-            _jumpAhead(expectedTimestamp - vm.getBlockTimestamp());
+            if (vm.getBlockTimestamp() < expectedTimestamp) {
+                // jump the diferrence between expected and actual time
+                _jumpAhead(expectedTimestamp - vm.getBlockTimestamp());
+            }
 
             vm.startPrank(participant);
             uint256 rewardsReceived = delegate.claimRewards(0);
