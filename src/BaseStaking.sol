@@ -259,7 +259,7 @@ abstract contract BaseStaking is OwnableUpgradeable, ERC20Votes {
     }
 
     /// @notice Initialize the contract minting dead shares to avoid inflation attack
-    function __BaseStaking_init() internal {
+    function __BaseStaking_init() internal onlyInitializing {
         // mint dead shares to avoid inflation attack
         uint256 amount = 10_000e18;
 
