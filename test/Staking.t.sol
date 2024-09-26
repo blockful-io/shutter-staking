@@ -450,6 +450,7 @@ contract Stake is StakingTest {
 
         vm.assume(_depositor1 != address(0));
         vm.assume(_depositor2 != address(0));
+        vm.assume(_depositor1 != _depositor2);
 
         uint256 shares = staking.convertToShares(_amount);
 
