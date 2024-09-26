@@ -26,7 +26,7 @@ contract Deploy is Script {
 
         vm.startBroadcast();
 
-        rewardsDistributor = new RewardsDistributor(
+        rewardsDistributor = new RewardsDistributor{salt: DEPLOYMENT_SALT}(
             CONTRACT_OWNER,
             address(STAKING_TOKEN)
         );
@@ -34,9 +34,10 @@ contract Deploy is Script {
 
         Staking stake = new Staking();
         vm.label(address(stake), "Staking");
+
         stakingProxy = Staking(
             address(
-                new TransparentUpgradeableProxy(
+                new TransparentUpgradeableProxy{salt: DEPLOYMENT_SALT}(
                     address(stake),
                     address(CONTRACT_OWNER),
                     ""
@@ -58,11 +59,11 @@ contract Deploy is Script {
             MIN_STAKE
         );
 
-        DelegateStaking delegate = new DelegateStaking();
+        DelegateStaking delegate = new DelegateStaking{salt: DEPLOYMENT_SALT}();
         vm.label(address(delegate), "DelegateStaking");
         delegateProxy = DelegateStaking(
             address(
-                new TransparentUpgradeableProxy(
+                new TransparentUpgradeableProxy{salt: DEPLOYMENT_SALT}(
                     address(delegate),
                     address(CONTRACT_OWNER),
                     ""

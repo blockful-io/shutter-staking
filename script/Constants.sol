@@ -6,3 +6,5 @@ uint256 constant MIN_STAKE = 50_000e18;
 uint256 constant REWARD_RATE = 0.1333333333e18;
 uint256 constant LOCK_PERIOD = 182 days;
 uint256 constant INITIAL_MINT = 10_000e18;
+
+bytes32 constant DEPLOYMENT_SALT = keccak256("SHUTTER_STAKING");
